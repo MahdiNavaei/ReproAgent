@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import traceback as traceback_module
+from contextlib import suppress
 from contextvars import Token
 from enum import StrEnum
 from pathlib import Path
@@ -142,15 +143,13 @@ class CaptureSession:
 
         def remember_capture_failure(failure: BaseException) -> None:
             capture_failures.append(failure)
-            try:
+            with suppress(BaseException):
                 self._builder.set_completeness(
                     CaptureCompleteness.PARTIAL,
                     reason=(
                         "capture instrumentation failed while preserving an application exception"
                     ),
                 )
-            except BaseException:
-                pass
 
         try:
             if exc is not None and self._state == CaptureSessionState.ACTIVE:
@@ -184,13 +183,11 @@ class CaptureSession:
 
         if exc is not None:
             for failure in capture_failures:
-                try:
+                with suppress(BaseException):
                     exc.add_note(
                         "ReproAgent capture also failed while preserving the original application "
                         f"exception ({type(failure).__name__})."
                     )
-                except BaseException:
-                    pass
             return False
 
         if capture_failures:
