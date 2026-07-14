@@ -10,6 +10,11 @@ from uuid import UUID
 from pydantic import JsonValue
 
 from reproagent.capture import CaptureSession, get_current_session
+from reproagent.domain import CaptureCompleteness
+
+
+class _UnsupportedNormalization(TypeError):
+    """Internal signal that a value cannot be represented as verified JSON capture data."""
 
 
 class _CapturedCreateProxy:
@@ -33,6 +38,10 @@ class _CapturedCreateProxy:
         except BaseException as exc:
             self._capture_exception(session, exc, request_event_id)
             raise
+
+        if kwargs.get("stream") is True:
+            _mark_unsupported(session, "openai streaming response capture is unsupported")
+            return response
 
         self._capture_response(
             session,
@@ -79,7 +88,8 @@ class _CapturedCreateProxy:
                     "openai.endpoint": self._endpoint,
                 },
             )
-        except Exception:
+        except BaseException:
+            _mark_degraded(session, "openai request normalization failed; request data omitted")
             return None
 
     def _capture_response(
@@ -91,7 +101,10 @@ class _CapturedCreateProxy:
         latency_ms: float,
         request_kwargs: dict[str, Any],
     ) -> None:
-        if session is None or request_event_id is None:
+        if session is None:
+            return
+        if request_event_id is None:
+            _mark_degraded(session, "openai response could not be linked to a captured request")
             return
         try:
             payload = _to_json(response)
@@ -108,8 +121,8 @@ class _CapturedCreateProxy:
                     "openai.endpoint": self._endpoint,
                 },
             )
-        except Exception:
-            return
+        except BaseException:
+            _mark_degraded(session, "openai response normalization failed; response data omitted")
 
     @staticmethod
     def _capture_exception(
@@ -120,9 +133,17 @@ class _CapturedCreateProxy:
         if session is None:
             return
         try:
-            session.exception(exc, parent_event_id=request_event_id, handled=False)
-        except Exception:
-            return
+            session.custom(
+                payload={
+                    "kind": "provider_exception",
+                    "provider": "openai",
+                    "exception_type": type(exc).__name__,
+                },
+                parent_event_id=request_event_id,
+                extensions={"reproagent.integration": "openai"},
+            )
+        except BaseException:
+            _mark_degraded(session, "openai provider exception metadata could not be captured")
 
 
 class _ChatProxy:
@@ -139,7 +160,7 @@ class _ChatProxy:
 
 
 class OpenAICaptureClient:
-    """Transparent client facade that captures selected OpenAI SDK create calls."""
+    """Transparent synchronous client facade for selected OpenAI SDK create calls."""
 
     def __init__(self, client: Any, *, session: CaptureSession | None = None) -> None:
         self._client = client
@@ -159,9 +180,27 @@ def capture_openai(
     *,
     session: CaptureSession | None = None,
 ) -> OpenAICaptureClient:
-    """Wrap one OpenAI client instance without patching process-global SDK state."""
+    """Wrap one synchronous OpenAI client instance without global SDK patching."""
 
     return OpenAICaptureClient(client, session=session)
+
+
+def _mark_degraded(session: CaptureSession | None, reason: str) -> None:
+    if session is None:
+        return
+    try:
+        session.set_completeness(CaptureCompleteness.DEGRADED, reason=reason)
+    except BaseException:
+        pass
+
+
+def _mark_unsupported(session: CaptureSession | None, reason: str) -> None:
+    if session is None:
+        return
+    try:
+        session.set_completeness(CaptureCompleteness.UNSUPPORTED, reason=reason)
+    except BaseException:
+        pass
 
 
 def _to_json(value: Any) -> JsonValue:
@@ -179,7 +218,9 @@ def _to_json(value: Any) -> JsonValue:
     if callable(to_dict):
         return _to_json(to_dict())
 
-    return repr(value)
+    raise _UnsupportedNormalization(
+        f"unsupported OpenAI capture value type: {type(value).__name__}"
+    )
 
 
 def _finish_reason(payload: JsonValue) -> str | None:
