@@ -27,6 +27,8 @@ jobs:
         run: ruff format --check .
       - name: Mypy
         run: mypy src/reproagent
+      - name: Build package
+        run: python -m build
 
   test:
     runs-on: ubuntu-latest
