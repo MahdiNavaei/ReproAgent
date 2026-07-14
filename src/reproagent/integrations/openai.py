@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import suppress
 from time import perf_counter
 from typing import Any
 from uuid import UUID
@@ -202,10 +203,8 @@ def capture_openai(
 def _mark_degraded(session: CaptureSession | None, reason: str) -> None:
     if session is None:
         return
-    try:
+    with suppress(BaseException):
         session.set_completeness(CaptureCompleteness.DEGRADED, reason=reason)
-    except BaseException:
-        pass
 
 
 def _to_json(value: Any) -> JsonValue:
