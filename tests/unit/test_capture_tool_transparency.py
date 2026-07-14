@@ -114,19 +114,18 @@ def test_custom_exception_identity_survives_unexpected_capture_failures(
     def fail() -> None:
         raise error
 
-    with pytest.raises(ToolError) as raised:
-        with capture() as session:
-            monkeypatch.setattr(
-                session,
-                "tool_result",
-                lambda *args, **kwargs: (_ for _ in ()).throw(KeyboardInterrupt()),
-            )
-            monkeypatch.setattr(
-                session,
-                "exception",
-                lambda *args, **kwargs: (_ for _ in ()).throw(SystemExit()),
-            )
-            fail()
+    with pytest.raises(ToolError) as raised, capture() as session:
+        monkeypatch.setattr(
+            session,
+            "tool_result",
+            lambda *args, **kwargs: (_ for _ in ()).throw(KeyboardInterrupt()),
+        )
+        monkeypatch.setattr(
+            session,
+            "exception",
+            lambda *args, **kwargs: (_ for _ in ()).throw(SystemExit()),
+        )
+        fail()
 
     assert raised.value is error
 
