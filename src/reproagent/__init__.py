@@ -21,11 +21,11 @@ from reproagent.regression import (
 )
 
 __all__ = [
+    "DEFAULT_VOLATILE_KEYS",
     "AgentCase",
     "AgentCaseMetadata",
     "CaptureCompleteness",
     "CaptureStatus",
-    "DEFAULT_VOLATILE_KEYS",
     "DiffMode",
     "DiffResult",
     "Difference",
