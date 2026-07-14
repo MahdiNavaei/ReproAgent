@@ -15,3 +15,7 @@ class AgentCaseSerializationError(AgentCaseError):
 
 class UnsupportedAgentCaseVersionError(AgentCaseError):
     """Raised when the file format version is not supported by this reader."""
+
+
+class AgentCaseFileExistsError(AgentCaseError):
+    """Raised when safe persistence would overwrite an existing AgentCase."""

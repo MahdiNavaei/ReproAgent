@@ -62,3 +62,10 @@ The Python package, public API, and AgentCase format are versioned independently
 ## Maintainer rule
 
 A smaller implementation that preserves these contracts is preferred over speculative abstractions. New infrastructure must answer a current product requirement, not a hypothetical enterprise future.
+
+
+## Current implementation status after the Capture Engine foundation
+
+The repository now includes the first real manual Python Capture Engine in addition to the original AgentCase v0 foundation. A local Python application can explicitly open a capture session, record normalized execution/model/tool events, apply the minimum redaction baseline, and atomically persist a valid AgentCase.
+
+Replay, diff, regression execution, automatic provider/framework interception, hosted services, and SaaS infrastructure remain outside the current implementation. The product mission and MVP boundary are unchanged.

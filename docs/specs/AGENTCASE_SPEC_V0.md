@@ -199,6 +199,18 @@ Each redaction record contains:
 
 Original secret values must never be stored in redaction metadata. A redaction status of `none` cannot include records; `redacted` requires at least one record.
 
+### 10.1 Redaction field path syntax
+
+`field_path` uses RFC 6901 JSON Pointer syntax. This is a backward-compatible clarification of the existing string field, not a wire-format version change. Path segments escape `~` as `~0` and `/` as `~1`.
+
+Examples:
+
+```text
+/metadata/user_metadata/api_key
+/events/3/payload/headers/authorization
+/events/5/extensions/com.example~1adapter/v1/token
+```
+
 ## 11. Extensibility
 
 Every major core object includes an `extensions` map. Extension keys should use a collision-resistant namespace, for example:
@@ -214,6 +226,10 @@ Every major core object includes an `extensions` map. Extension keys should use 
 ```
 
 Core readers preserve extension values as JSON data but do not treat unknown extensions as verified core semantics. Unknown top-level fields are rejected to prevent accidental reinterpretation.
+
+The Prompt 02 Capture Engine uses the project-owned root extension namespace `org.reproagent.capture/v1` for capture diagnostics such as dropped-event counts and safe degradation reasons. This extension does not change AgentCase `0.1` core semantics.
+
+For multi-provider or multi-model executions, event-level `model.request` and `model.response` payloads are the source of truth for each interaction. Optional root provider/model metadata may only represent an explicitly declared primary value and must not be repeatedly overwritten to imply that the final interaction was the only one used.
 
 ## 12. Versioning and compatibility
 

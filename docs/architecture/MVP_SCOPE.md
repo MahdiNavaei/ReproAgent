@@ -12,13 +12,13 @@ reproagent diff baseline.agentcase candidate.agentcase
 reproagent test cases/
 ```
 
-Only `--version`, `validate`, and `inspect` exist in the foundation milestone. The remaining commands are planned contracts, not implemented features.
+The current repository implements `--version`, `validate`, and `inspect`, plus explicit manual Python capture through `reproagent.capture`. The `record`, `replay`, `diff`, and `test` commands remain planned contracts and are not implemented.
 
 ## Capture scope
 
-The future capture layer must be able to represent execution metadata, ordered events, messages, model requests and responses, tool definitions and calls, tool results and failures, retries, exceptions, latency, token usage when available, provider and model identifiers, timestamps, parent-child relationships, execution outcome, environment metadata, and redaction metadata.
+The current manual Capture Engine can explicitly represent execution metadata, ordered events, messages, model requests and responses, tool definitions and calls, tool results and failures, retries, exceptions, latency when observed, token usage when provided, provider and model identifiers, timestamps, parent-child relationships, execution outcome, capture completeness, diagnostics, and redaction metadata.
 
-The capture layer is adapter-driven. No framework is permitted to define the core event model.
+The first supported integration is explicit framework-neutral Python instrumentation. Automatic provider/framework interception is not implemented. Future adapters must emit through the same capture contract; no framework is permitted to define the core event model.
 
 ## Replay scope
 

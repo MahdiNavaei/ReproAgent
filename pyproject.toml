@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=75"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "reproagent"
-version = "0.1.0"
+version = "0.1.1"
 description = "The open-source flight recorder for AI agents: capture failures, replay them, compare executions, and prevent regressions."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { file = "LICENSE" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [
   { name = "ReproAgent contributors" }
 ]
@@ -16,7 +17,6 @@ keywords = ["ai", "agents", "debugging", "replay", "regression-testing", "llm"]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: Apache Software License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -30,6 +30,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "build>=1.2",
   "mypy>=1.15",
   "pytest>=8.3",
   "ruff>=0.11",

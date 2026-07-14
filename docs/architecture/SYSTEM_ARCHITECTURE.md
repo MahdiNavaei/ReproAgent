@@ -2,58 +2,88 @@
 
 ## Architecture baseline
 
-ReproAgent begins as a lightweight Python package with a portable data artifact at its center.
+ReproAgent is a lightweight Python package with a portable data artifact at its center.
 
 ```text
-Framework / Provider Adapters (future)
-              |
-              v
-       Capture Normalization (future)
-              |
-              v
+User instrumentation / future adapters
+                 |
+                 v
+          Capture Session
+                 |
+                 v
+      Normalized event payloads
+                 |
+                 v
+       Redaction before retention
+                 |
+                 v
+      Ordered AgentCase builder
+                 |
+                 v
       Provider-neutral Domain Model
-              |
-              v
-         AgentCase v0 JSON
-          /      |      \
-         v       v       v
-      Inspect   Replay   Diff        (replay and diff are future)
-                         |
-                         v
-                  Regression Tests    (future)
+                 |
+                 v
+          AgentCase v0 JSON
+           /      |      \
+          v       v       v
+       Inspect   Replay   Diff        (replay and diff are future)
+                          |
+                          v
+                   Regression Tests    (future)
 ```
 
 ## Current package boundaries
 
 ### `reproagent.domain`
 
-Owns provider-neutral, framework-neutral validated domain types and enums. It has no network behavior and no integration-specific capture logic.
+Owns provider-neutral, framework-neutral validated domain types and enums. It has no network behavior and does not import capture or integration implementation.
 
 ### `reproagent.agentcase`
 
-Owns the data-only `.agentcase` serialization boundary: bounded file loading, format header checks, model validation, deterministic canonical serialization, and human-readable summaries.
+Owns the data-only `.agentcase` serialization boundary: bounded file loading, format header checks, model validation, deterministic canonical serialization, atomic local publication, and human-readable summaries.
+
+### `reproagent.capture`
+
+Owns the first real execution capture path: explicit manual Python instrumentation, lifecycle control, normalized payload contracts, ordered event creation, capture diagnostics, context-local active-session access, and synchronous tool convenience instrumentation.
+
+### `reproagent.security`
+
+Owns the current best-effort redaction pipeline and additive user-defined redaction-rule extension point.
 
 ### `reproagent.cli`
 
 Owns the thin local command-line adapter. It delegates validation and inspection to the core package and contains no provider logic.
 
-Packages for capture, replay, diff, testing integration, and framework adapters are intentionally not created yet. Empty abstraction layers would imply stability that does not exist. They will be added when their first concrete implementation milestone begins.
+Replay, diff, regression execution, and provider/framework integration packages are intentionally not implemented yet.
 
 ## Dependency direction
 
 ```text
-cli -> agentcase -> domain
+user instrumentation / future integrations
+                 ↓
+              capture
+                 ↓
+       normalization + builder
+                 ↓
+              domain
+                 ↓
+             agentcase
+
+cli → agentcase → domain
+capture → security
+capture → agentcase
+capture → domain
 ```
 
-The domain package does not depend on CLI or integrations. Future adapters may depend on domain contracts, but the domain must not import adapters.
+The domain package does not depend on capture, CLI, security implementation, or integrations. AgentCase serialization does not depend on provider SDKs.
 
 ## Python support baseline
 
-The package requires Python 3.11 or newer. At the foundation date (2026-07-14), Python 3.10 is scheduled to reach end of life in October 2026, while Python 3.11 remains in security support until October 2027. Choosing 3.11 avoids starting a new public library on a runtime with only a few months of upstream support left while still covering four active interpreter lines in CI: Python 3.11 through 3.14.
+The package requires Python 3.11 or newer. Python 3.11 is the minimum supported version so the project does not begin on a runtime close to upstream end of life while still covering modern supported interpreter lines in CI.
 
 ## Validation approach
 
-Pydantic v2 is the single runtime dependency. It provides typed public models, deterministic validation errors, and strict rejection of unknown schema fields. The wire format remains plain JSON and is documented independently from Pydantic.
+Pydantic v2 remains the single runtime dependency. It provides typed public domain models, strict normalized payload models, deterministic validation errors, and rejection of unknown schema fields. The wire format remains plain JSON and is documented independently from Pydantic.
 
 ## Artifact boundary
 
@@ -63,25 +93,39 @@ AgentCase v0 is UTF-8 JSON. Loading does not execute Python code or reconstruct 
 
 Canonical serialization uses:
 
-- UTF-8
-- sorted object keys
-- compact separators
-- no NaN or Infinity
-- normalized Pydantic JSON forms for UUIDs, enums, and datetimes
-- one trailing newline
+- UTF-8,
+- sorted object keys,
+- compact separators,
+- no NaN or Infinity,
+- normalized JSON forms for UUIDs, enums, and datetimes,
+- one trailing newline.
 
 Deterministic serialization means the same validated semantic model produces the same bytes under the same AgentCase format rules. It does not mean two independent live executions are behaviorally deterministic.
 
-## Future capture architecture
+## Current capture architecture
 
-Capture will be split into:
+The first Capture Engine is explicit and framework neutral:
 
-1. adapters that observe framework/provider-specific events,
-2. a normalization boundary that emits core events,
-3. an ordered case builder that tracks capture completeness and failures,
-4. redaction before artifact persistence wherever technically possible.
+1. user code or a future adapter calls the public Capture Session API,
+2. strict normalized payload models validate common semantics,
+3. redaction runs before observed payload data is retained,
+4. one ordered builder allocates event sequences and validates parents,
+5. the builder constructs the same public `AgentCase` domain model used everywhere else,
+6. persistence uses deterministic serialization and atomic local publication.
 
-Adapters must report unsupported or degraded capture explicitly instead of dropping information silently.
+Capture diagnostics are recorded under the namespaced extension `org.reproagent.capture/v1` rather than changing the AgentCase `0.1` root schema.
+
+## Concurrency boundary
+
+The active session uses `contextvars`, not one unsafe process-global mutable value. Ordinary asyncio tasks created inside the active context inherit the session context. Event append operations use one synchronized sequence allocator.
+
+New OS threads do not automatically inherit context-variable state. Multiprocessing and separate processes remain independent. Prompt 02 does not claim distributed tracing.
+
+## Future integration architecture
+
+Provider and framework adapters will observe their native callbacks or SDK behavior and emit through the same Capture Session API. They must normalize common semantics before using namespaced extensions and must report unsupported or degraded observations explicitly.
+
+No current code monkeypatches provider SDKs, HTTP clients, frameworks, or subprocesses.
 
 ## Future replay architecture
 
