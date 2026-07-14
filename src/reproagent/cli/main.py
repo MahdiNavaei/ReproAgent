@@ -19,7 +19,9 @@ from reproagent.replay import ReplayError, mock_replay
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="reproagent",
-        description="Capture, validate, inspect, and safely replay portable ReproAgent execution cases.",
+        description=(
+            "Capture, validate, inspect, and safely replay portable ReproAgent execution cases."
+        ),
     )
     parser.add_argument("--version", action="version", version=f"reproagent {__version__}")
 
@@ -36,8 +38,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Create a safe replay artifact without executing live providers or tools",
     )
     replay_parser.add_argument("case", help="Path to the source .agentcase file")
-    replay_parser.add_argument("--mock", action="store_true", help="Use deterministic data-only mock replay")
-    replay_parser.add_argument("--output", required=True, help="Path for the replayed .agentcase file")
+    replay_parser.add_argument(
+        "--mock",
+        action="store_true",
+        help="Use deterministic data-only mock replay",
+    )
+    replay_parser.add_argument(
+        "--output",
+        required=True,
+        help="Path for the replayed .agentcase file",
+    )
     replay_parser.add_argument(
         "--allow-incomplete",
         action="store_true",
