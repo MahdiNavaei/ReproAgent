@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Generic, Literal, TypeVar
 
 from pydantic import JsonValue
+
 from reproagent.domain import AgentCase, Event, EventType
 from reproagent.replay.errors import ReplayContractError
 from reproagent.replay.mock import validate_mock_replay_source
