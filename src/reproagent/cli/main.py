@@ -6,14 +6,13 @@ import argparse
 import sys
 from collections.abc import Sequence
 
+from reproagent import __version__
 from reproagent.agentcase import (
     AgentCaseError,
     atomic_dump_agentcase,
     load_agentcase,
     summarize_agentcase,
 )
-
-from reproagent import __version__
 from reproagent.replay import ReplayError, mock_replay
 
 
