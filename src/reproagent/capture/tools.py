@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from contextlib import suppress
 from functools import wraps
 from time import perf_counter
 from typing import ParamSpec, TypeVar, cast
@@ -43,10 +44,8 @@ def capture_tool(*, name: str | None = None) -> Callable[[Callable[P, R]], Calla
                 try:
                     bound = signature.bind(*args, **kwargs)
                     bound.apply_defaults()
-                    call_event_id = session.tool_call(
-                        name=tool_name,
-                        arguments=cast(JsonValue, dict(bound.arguments)),
-                    )
+                    arguments = _to_json_value(dict(bound.arguments))
+                    call_event_id = session.tool_call(name=tool_name, arguments=arguments)
                 except BaseException:
                     call_event_id = None
 
@@ -61,7 +60,7 @@ def capture_tool(*, name: str | None = None) -> Callable[[Callable[P, R]], Calla
                         error["message"] = str(exc)
                     except BaseException:
                         error["message"] = "<unavailable>"
-                    try:
+                    with suppress(BaseException):
                         session.tool_result(
                             parent_event_id=call_event_id,
                             name=tool_name,
@@ -69,21 +68,17 @@ def capture_tool(*, name: str | None = None) -> Callable[[Callable[P, R]], Calla
                             error=error,
                             latency_ms=latency_ms,
                         )
-                    except BaseException:
-                        pass
-                    try:
+                    with suppress(BaseException):
                         session.exception(
                             exc,
                             parent_event_id=call_event_id,
                             handled=False,
                         )
-                    except BaseException:
-                        pass
                 raise
 
             latency_ms = _safe_latency_ms(started)
             if call_event_id is not None:
-                try:
+                with suppress(BaseException):
                     session.tool_result(
                         parent_event_id=call_event_id,
                         name=tool_name,
@@ -91,13 +86,21 @@ def capture_tool(*, name: str | None = None) -> Callable[[Callable[P, R]], Calla
                         result=cast(JsonValue, result),
                         latency_ms=latency_ms,
                     )
-                except BaseException:
-                    pass
             return result
 
         return wrapper
 
     return decorator
+
+
+def _to_json_value(value: object) -> JsonValue:
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, Mapping):
+        return {str(key): _to_json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_json_value(item) for item in value]
+    raise TypeError(f"unsupported tool observation type: {type(value).__name__}")
 
 
 def _safe_perf_counter() -> float | None:
