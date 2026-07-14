@@ -27,7 +27,8 @@ def _terminal_children(case: AgentCase, parent_type: EventType, child_type: Even
     children_by_parent: dict[UUID, int] = {}
     for event in case.events:
         if event.event_type == child_type and event.parent_event_id is not None:
-            children_by_parent[event.parent_event_id] = children_by_parent.get(event.parent_event_id, 0) + 1
+            current_count = children_by_parent.get(event.parent_event_id, 0)
+            children_by_parent[event.parent_event_id] = current_count + 1
 
     for event in case.events:
         if event.event_type != parent_type:
@@ -71,11 +72,16 @@ def mock_replay(case: AgentCase, *, allow_incomplete: bool = False) -> AgentCase
         substitutions=(
             ReplaySubstitution(
                 target="model.provider_calls",
-                description="captured model responses reused as immutable data; no provider call executed",
+                description=(
+                    "captured model responses reused as immutable data; "
+                    "no provider call executed"
+                ),
             ),
             ReplaySubstitution(
                 target="tool.side_effects",
-                description="captured tool results reused as immutable data; no tool executed",
+                description=(
+                    "captured tool results reused as immutable data; no tool executed"
+                ),
             ),
         ),
         determinism_guarantee=DeterminismGuarantee.DETERMINISTIC,
