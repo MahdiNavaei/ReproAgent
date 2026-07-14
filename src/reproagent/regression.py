@@ -2,22 +2,17 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 
 from reproagent.diff import DiffMode, DiffResult, JsonValue, compare
 from reproagent.domain import AgentCase
 
-DEFAULT_VOLATILE_KEYS = frozenset(
-    {
-        "case_id",
-        "execution_id",
-        "created_at",
-        "event_id",
-        "parent_event_id",
-        "timestamp",
-        "replay",
-    }
-)
+# Recursive name-only ignores are intentionally not the default: a business payload
+# field named ``timestamp`` or ``event_id`` is real captured data and must still diff.
+DEFAULT_VOLATILE_KEYS: frozenset[str] = frozenset()
+_ROOT_VOLATILE_FIELDS = frozenset({"case_id", "execution_id", "created_at", "replay"})
+_EVENT_VOLATILE_FIELDS = frozenset({"event_id", "parent_event_id", "timestamp"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,10 +31,10 @@ def compare_agentcases(
     ignored_keys: frozenset[str] = DEFAULT_VOLATILE_KEYS,
     float_tolerance: float = 1e-9,
 ) -> RegressionResult:
-    """Compare two validated AgentCases as data, ignoring volatile identity fields by default."""
+    """Compare AgentCases after removing only known volatile schema locations."""
 
-    baseline_data = baseline.model_dump(mode="json")
-    observed_data = observed.model_dump(mode="json")
+    baseline_data = _normalize_agentcase_volatility(baseline.model_dump(mode="json"))
+    observed_data = _normalize_agentcase_volatility(observed.model_dump(mode="json"))
     diff = compare(
         _json_value(baseline_data),
         _json_value(observed_data),
@@ -74,6 +69,25 @@ def assert_agentcase_regression(
         f"{difference.path}: {difference.kind}" for difference in result.diff.differences
     )
     raise AssertionError(f"AgentCase regression detected ({mode.value}): {details}")
+
+
+def _normalize_agentcase_volatility(value: object) -> object:
+    if not isinstance(value, dict):
+        raise TypeError("AgentCase JSON projection must be an object")
+
+    normalized = deepcopy(value)
+    for key in _ROOT_VOLATILE_FIELDS:
+        normalized.pop(key, None)
+
+    events = normalized.get("events")
+    if isinstance(events, list):
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            for key in _EVENT_VOLATILE_FIELDS:
+                event.pop(key, None)
+
+    return normalized
 
 
 def _json_value(value: object) -> JsonValue:
