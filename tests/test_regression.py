@@ -50,6 +50,30 @@ def test_regression_reports_stable_payload_path() -> None:
     assert result.diff.differences[0].path == "$.events[4].payload.status"
 
 
+def test_payload_field_named_timestamp_is_not_treated_as_volatile_metadata() -> None:
+    baseline = _baseline()
+    baseline_event = baseline.events[1].model_copy(
+        update={"payload": {**baseline.events[1].payload, "timestamp": "2026-01-01"}}
+    )
+    baseline = baseline.model_copy(
+        update={"events": (*baseline.events[:1], baseline_event, *baseline.events[2:])}
+    )
+    observed_event = baseline_event.model_copy(
+        update={"payload": {**baseline_event.payload, "timestamp": "2030-01-01"}}
+    )
+    observed = baseline.model_copy(
+        update={"events": (*baseline.events[:1], observed_event, *baseline.events[2:])}
+    )
+
+    result = compare_agentcases(baseline, observed)
+
+    assert not result.passed
+    assert any(
+        difference.path == "$.events[1].payload.timestamp"
+        for difference in result.diff.differences
+    )
+
+
 def test_regression_can_use_structural_mode() -> None:
     baseline = _baseline()
     observed = baseline.model_copy(update={"outcome": ExecutionOutcome.SUCCESS})
