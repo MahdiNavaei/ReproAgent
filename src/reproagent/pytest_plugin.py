@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import pytest
+
 from reproagent.diff import DiffMode
 from reproagent.domain import AgentCase
 from reproagent.regression import assert_agentcase_regression
