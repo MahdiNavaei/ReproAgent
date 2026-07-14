@@ -20,7 +20,6 @@ from reproagent.domain import (
     ReplayMode,
     ReplaySubstitution,
 )
-
 from reproagent.replay.errors import ReplayContractError, ReplaySafetyError
 
 
