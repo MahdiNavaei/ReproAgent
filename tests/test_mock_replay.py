@@ -3,7 +3,6 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-
 from reproagent.domain import (
     AgentCase,
     CaptureCompleteness,
@@ -11,6 +10,7 @@ from reproagent.domain import (
     EventType,
     ExecutionOutcome,
 )
+
 from reproagent.replay import (
     ReplayContractError,
     mock_replay,
@@ -129,9 +129,7 @@ def test_mock_replay_copies_events_as_data_and_records_provenance() -> None:
 
 
 def test_mock_replay_rejects_incomplete_capture_by_default() -> None:
-    source = _complete_case().model_copy(
-        update={"completeness": CaptureCompleteness.PARTIAL}
-    )
+    source = _complete_case().model_copy(update={"completeness": CaptureCompleteness.PARTIAL})
 
     with pytest.raises(ReplayContractError, match="complete capture"):
         mock_replay(source)
@@ -141,7 +139,7 @@ def test_mock_replay_rejects_incomplete_capture_by_default() -> None:
 
 
 def test_mock_replay_rejects_missing_model_response() -> None:
-    with pytest.raises(ReplayContractError, match="exactly one model.response"):
+    with pytest.raises(ReplayContractError, match=r"exactly one model.response"):
         validate_mock_replay_source(_case_with_unanswered_model_request())
 
 
