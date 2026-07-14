@@ -8,6 +8,7 @@ from reproagent.capture import (
     CapturePersistenceError,
     CaptureSessionState,
     capture,
+    get_current_session,
 )
 from reproagent.domain import CaptureCompleteness, EventType, ExecutionOutcome
 
@@ -139,3 +140,34 @@ def test_capture_persistence_failure_does_not_replace_application_exception(
 
     assert str(exc_info.value) == "primary failure"
     assert any("ReproAgent capture also failed" in note for note in exc_info.value.__notes__)
+
+
+def test_unexpected_exception_capture_fault_cannot_mask_original_exception() -> None:
+    expected = SyntheticApplicationError("primary failure")
+
+    with pytest.raises(SyntheticApplicationError) as raised:
+        with capture() as session:
+            def broken_exception(*_: object, **__: object) -> None:
+                raise KeyboardInterrupt("capture fault")
+
+            session.exception = broken_exception  # type: ignore[method-assign]
+            raise expected
+
+    assert raised.value is expected
+    assert get_current_session() is None
+    assert any("ReproAgent capture also failed" in note for note in expected.__notes__)
+
+
+def test_unexpected_finalize_fault_cannot_mask_original_exception() -> None:
+    expected = SyntheticApplicationError("primary failure")
+
+    with pytest.raises(SyntheticApplicationError) as raised:
+        with capture() as session:
+            def broken_finalize() -> None:
+                raise SystemExit("capture fault")
+
+            session.finalize = broken_finalize  # type: ignore[method-assign]
+            raise expected
+
+    assert raised.value is expected
+    assert get_current_session() is None
