@@ -1,7 +1,7 @@
 """ReproAgent public package surface."""
 
 from reproagent._version import __version__
-from reproagent.diff import DiffMode, DiffResult, Difference, compare
+from reproagent.diff import Difference, DiffMode, DiffResult, compare
 from reproagent.domain import (
     AgentCase,
     AgentCaseMetadata,
