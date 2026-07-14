@@ -2,8 +2,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from reproagent.agentcase import dump_agentcase_bytes
 from reproagent.capture import capture
-from reproagent.domain import EventType
+from reproagent.domain import CaptureCompleteness, EventType
 from reproagent.integrations.openai import capture_openai
 
 
@@ -105,6 +106,75 @@ def test_provider_exception_is_re_raised_unchanged_and_captured() -> None:
     assert raised.value is provider_error
     assert session.case is not None
     assert any(event.event_type == EventType.EXCEPTION for event in session.case.events)
+
+
+def test_streaming_passes_through_without_eager_consumption_or_fake_response() -> None:
+    class StreamMarker:
+        def __iter__(self) -> object:
+            raise AssertionError("capture must not consume stream")
+
+    stream = StreamMarker()
+    resource = FakeResource(result=stream)
+    client = FakeClient(responses=resource, completions=FakeResource())
+
+    with capture() as session:
+        actual = capture_openai(client).responses.create(
+            model="gpt-test", input="hello", stream=True
+        )
+
+    assert actual is stream
+    assert len(resource.calls) == 1
+    assert session.case is not None
+    assert session.case.completeness == CaptureCompleteness.UNSUPPORTED
+    assert not any(
+        event.event_type == EventType.MODEL_RESPONSE for event in session.case.events
+    )
+
+
+def test_unsupported_values_are_omitted_without_repr_or_provider_call_duplication() -> None:
+    secret = "secret-from-dangerous-repr"
+
+    class DangerousObject:
+        def __repr__(self) -> str:
+            return secret
+
+    response = FakeResponse({"output": []})
+    resource = FakeResource(result=response)
+    client = FakeClient(responses=resource, completions=FakeResource())
+
+    with capture() as session:
+        actual = capture_openai(client).responses.create(
+            model="gpt-test", input="hello", transport=DangerousObject()
+        )
+
+    assert actual is response
+    assert len(resource.calls) == 1
+    assert session.case is not None
+    assert session.case.completeness == CaptureCompleteness.DEGRADED
+    assert secret.encode() not in dump_agentcase_bytes(session.case)
+
+
+def test_sensitive_headers_and_provider_exception_secret_do_not_leak() -> None:
+    api_key = "sk-proj-abcdefghijklmnop123456"
+    bearer = "Bearer abcdefghijklmnopqrstuvwxyz"
+    provider_error = RuntimeError(f"provider failed with {api_key}")
+    resource = FakeResource(error=provider_error)
+    client = FakeClient(responses=resource, completions=FakeResource())
+
+    with capture() as session:
+        with pytest.raises(RuntimeError) as raised:
+            capture_openai(client).responses.create(
+                model="gpt-test",
+                input="hello",
+                extra_headers={"Authorization": bearer, "X-Api-Key": api_key},
+            )
+        assert raised.value is provider_error
+
+    assert len(resource.calls) == 1
+    assert session.case is not None
+    encoded = dump_agentcase_bytes(session.case)
+    assert api_key.encode() not in encoded
+    assert bearer.encode() not in encoded
 
 
 def test_wrapper_is_opt_in_and_forwards_unselected_client_attributes() -> None:
