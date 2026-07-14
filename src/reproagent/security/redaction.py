@@ -13,19 +13,19 @@ _JSON_VALUE_ADAPTER: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 _SENSITIVE_KEYS = frozenset(
     {
         "authorization",
-        "proxy-authorization",
-        "api-key",
-        "x-api-key",
+        "proxyauthorization",
+        "apikey",
+        "xapikey",
         "token",
-        "access-token",
-        "refresh-token",
+        "accesstoken",
+        "refreshtoken",
         "password",
         "passwd",
         "secret",
-        "client-secret",
+        "clientsecret",
         "cookie",
-        "set-cookie",
-        "connection-string",
+        "setcookie",
+        "connectionstring",
     }
 )
 
@@ -181,7 +181,9 @@ class Redactor:
 
 
 def _normalize_sensitive_key(key: str) -> str:
-    return key.strip().casefold().replace("_", "-")
+    """Canonicalize common key spelling variants before exact sensitive-key matching."""
+
+    return "".join(character for character in key.casefold() if character.isalnum())
 
 
 def _join_pointer(base: str, segment: str) -> str:
