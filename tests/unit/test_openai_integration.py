@@ -1,9 +1,9 @@
 from types import SimpleNamespace
 
 import pytest
+
 from reproagent.capture import capture
 from reproagent.domain import EventType
-
 from reproagent.integrations.openai import capture_openai
 
 
