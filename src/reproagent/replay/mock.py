@@ -9,7 +9,7 @@ metadata makes the substitution explicit.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from reproagent.domain import (
     AgentCase,
@@ -24,7 +24,7 @@ from reproagent.replay.errors import ReplayContractError, ReplaySafetyError
 
 
 def _terminal_children(case: AgentCase, parent_type: EventType, child_type: EventType) -> None:
-    children_by_parent: dict[object, int] = {}
+    children_by_parent: dict[UUID, int] = {}
     for event in case.events:
         if event.event_type == child_type and event.parent_event_id is not None:
             children_by_parent[event.parent_event_id] = children_by_parent.get(event.parent_event_id, 0) + 1
@@ -63,11 +63,6 @@ def mock_replay(case: AgentCase, *, allow_incomplete: bool = False) -> AgentCase
     """
 
     validate_mock_replay_source(case, allow_incomplete=allow_incomplete)
-
-    if any(event.event_type == EventType.CUSTOM for event in case.events) and allow_incomplete:
-        # Explicitly guard against callers interpreting opt-in incomplete replay as authorization
-        # to execute opaque custom events. Mock replay remains data-only in every mode.
-        pass
 
     replay = ReplayMetadata(
         mode=ReplayMode.MOCK,
