@@ -15,6 +15,7 @@ from reproagent.domain import (
 )
 from reproagent.regression import (
     DEFAULT_VOLATILE_KEYS,
+    DEFAULT_VOLATILE_PATHS,
     RegressionResult,
     assert_agentcase_regression,
     compare_agentcases,
@@ -22,6 +23,7 @@ from reproagent.regression import (
 
 __all__ = [
     "DEFAULT_VOLATILE_KEYS",
+    "DEFAULT_VOLATILE_PATHS",
     "AgentCase",
     "AgentCaseMetadata",
     "CaptureCompleteness",
