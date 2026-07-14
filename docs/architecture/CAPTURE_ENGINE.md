@@ -2,215 +2,154 @@
 
 ## 1. Mission
 
-Prompt 02 introduces the first real executable path from Python behavior to a valid AgentCase:
+The Capture Engine is the explicit path from observed local Python behavior to a valid AgentCase:
 
 ```text
-explicit Python instrumentation
-            ↓
-       Capture Session
-            ↓
- normalized payload contracts
-            ↓
-       redaction boundary
-            ↓
-     ordered AgentCase builder
-            ↓
-   validated AgentCase model
-            ↓
- atomic local persistence
+explicit Python instrumentation / selected adapter
+                     ↓
+                Capture Session
+                     ↓
+          normalized payload contracts
+                     ↓
+              redaction boundary
+                     ↓
+            ordered AgentCase builder
+                     ↓
+          validated AgentCase model
+                     ↓
+           atomic local persistence
 ```
 
-This is intentionally manual instrumentation. There is no provider monkeypatching, framework interception, subprocess recording, or network dependency.
+Capture is intentionally explicit. There is no arbitrary-process recorder, global provider monkeypatch, subprocess interception, or hidden telemetry.
 
-## 2. Dependency direction
-
-```text
-integrations / user instrumentation
-             ↓
-        capture API
-             ↓
-      capture session
-             ↓
-     normalization layer
-             ↓
-      AgentCase builder
-             ↓
-       domain models
-             ↓
-   agentcase serialization
-```
-
-The domain package does not import capture. AgentCase serialization does not import provider SDKs.
-
-## 3. Components
+## 2. Components
 
 ### `reproagent.capture.session`
 
-Owns the explicit lifecycle, public event methods, outcome/completeness control, exception behavior, and finalization.
+Owns explicit lifecycle, public event methods, outcome/completeness control, exception behavior, finalization, and persistence orchestration.
 
 ### `reproagent.capture.payloads`
 
-Defines strict provider-neutral normalized payload models before data reaches the event builder.
+Defines strict provider-neutral normalized payload models before event retention.
 
 ### `reproagent.capture.builder`
 
-Owns case/execution identity, central sequence allocation, parent validation, accumulated events, capture health, redaction records, diagnostics, and final construction of the public `AgentCase` model.
-
-It does not create a second wire representation.
+Owns identity, sequence allocation, parent validation, accumulated events, capture health, redaction records, diagnostics, and final construction of the public AgentCase model.
 
 ### `reproagent.capture.context`
 
-Uses `contextvars` for the active session. No process-global mutable current session is used.
+Uses `contextvars` for the active session. No unsafe process-global current-session value is used.
 
 ### `reproagent.capture.tools`
 
-Provides the first convenience adapter, `@capture_tool`, for synchronous Python functions.
+Provides synchronous `@capture_tool` convenience instrumentation.
 
 ### `reproagent.security.redaction`
 
-Runs before observed payload or metadata is retained by the builder. It provides structured sensitive-key redaction, conservative secret-pattern rules, and additive user-defined string rules.
+Runs before observed payload or metadata is retained by the builder. It provides sensitive-key redaction, conservative secret-pattern rules, and additive user-defined string rules.
 
 ### `reproagent.agentcase.atomic_dump_agentcase`
 
-Writes validated canonical bytes to a temporary file in the destination directory, flushes and fsyncs the file, then publishes it. Existing targets are not overwritten unless `overwrite=True` is explicit.
+Publishes validated canonical bytes atomically on the local filesystem when technically supported by the target filesystem semantics. Existing targets are not overwritten unless `overwrite=True` is explicit.
 
-This is a local-filesystem atomic publication strategy, not a claim of crash-proof durability on every filesystem or storage layer.
-
-## 4. Lifecycle
+## 3. Lifecycle
 
 A session moves through:
 
 ```text
-created → active → finalizing → closed
+created -> active -> finalizing -> closed
 ```
 
 Rules:
 
-- observations before activation fail explicitly,
-- observations after close fail explicitly,
-- one central builder assigns event sequences,
-- repeated `finalize()` after successful finalization returns the same immutable case,
-- an `execution.start` event is recorded at activation,
-- an `execution.end` event is recorded during finalization,
-- the root outcome and terminal event outcome are constructed from one authoritative value.
+- observations before activation or after close fail explicitly;
+- one central builder assigns event sequences;
+- repeated successful `finalize()` returns the same immutable case;
+- `execution.start` is recorded at activation;
+- `execution.end` is recorded during finalization;
+- root and terminal outcomes use one authoritative value.
 
-## 5. Context manager semantics
+## 4. Context manager and exception semantics
 
 ### Normal exit
 
-When the application leaves the context normally:
-
-1. an unknown outcome defaults to `success`,
-2. `execution.end` is appended,
-3. the AgentCase is validated,
-4. the case is atomically persisted when an output path exists.
+On normal exit an unknown outcome defaults to `success`, `execution.end` is appended, AgentCase validation runs, and configured persistence is attempted. A capture failure may surface because no application exception is already primary.
 
 ### Application exception
 
-When an exception escapes the context:
+When a `BaseException` escapes application code:
 
-1. a normalized `exception` event is attempted,
-2. outcome becomes `failure` unless a more specific outcome was already set,
-3. `execution.end` is attempted,
-4. the AgentCase is finalized and persistence is attempted,
-5. the original application exception is re-raised.
+1. ReproAgent attempts to observe the exception;
+2. it attempts to set failure outcome when appropriate;
+3. it attempts finalization and persistence;
+4. it attempts context reset;
+5. the original application exception remains primary and is re-raised by Python context-manager semantics.
 
-A Capture Engine failure must not replace the original application exception. When both fail, the original exception remains primary and receives a safe note identifying that capture also failed.
+Unexpected capture-side `BaseException` failures in those attempts are collected. They may add constant safe notes naming only the capture failure type to the original exception. They are not allowed to replace the original application/provider exception.
 
-## 6. Logical failures
+If capture observation itself fails, completeness is best-effort elevated to `partial` with a constant diagnostic reason before finalization when possible.
 
-Not all failed agent runs raise Python exceptions. `session.set_outcome(...)` records an explicit outcome and optional reason as data.
+## 5. Logical failures and capture health
 
-Execution outcome and capture completeness are independent. Examples include:
+Not all failed agent runs raise Python exceptions. `session.set_outcome(...)` records explicit logical outcome and optional reason.
 
-- failure + complete capture,
-- success + degraded capture,
-- failure + partial capture.
+Execution outcome and capture completeness remain independent. Valid combinations include failure plus complete capture, success plus degraded capture, and failure plus partial capture.
 
-## 7. Diagnostics extension
+Capture diagnostics live under `org.reproagent.capture/v1` and retain safe categories, counts, and constant reasons rather than raw failed payloads.
 
-Capture-specific diagnostics use the namespaced root extension:
+## 6. Redaction boundary
 
-```text
-org.reproagent.capture/v1
-```
+Redaction runs before event payloads, extensions, or explicit user metadata are retained. Defaults cover normalized sensitive-key forms and conservative bearer/`sk-...` style secret patterns.
 
-Current fields include:
+When redaction fails, raw observed data is dropped rather than persisted unredacted and capture completeness becomes at least `partial`.
 
-- warnings,
-- unsupported observations,
-- redaction failures,
-- normalization failures,
-- serialization warnings,
-- dropped event count,
-- degraded reasons.
+Default redaction is best effort. It does not guarantee removal of every secret or PII class and does not make an AgentCase safe to publish.
 
-Diagnostics intentionally retain safe categories and counts rather than raw failed payloads or secret values. Unknown extensions are not verified AgentCase core semantics.
-
-## 8. Redaction boundary
-
-Redaction runs before event payloads, event extensions, or explicit user metadata are retained by the builder.
-
-Default behavior includes:
-
-- case-insensitive sensitive-key matching,
-- common authorization/token/password/connection-string key forms,
-- conservative bearer-token detection in strings,
-- conservative `sk-...` style key detection,
-- additive user-defined string rules.
-
-When redaction fails, the raw observed event is dropped rather than persisted unredacted. Capture completeness becomes at least `partial`, and safe diagnostics record the failure category.
-
-Default redaction is best-effort. It does not guarantee removal of all secrets or PII and does not make an AgentCase safe to publish.
-
-## 9. Ordering and concurrency
-
-One builder owns one append-only event list and sequence allocator. Appends are protected by a re-entrant lock.
-
-`contextvars` means ordinary asyncio tasks created within an active context inherit the same session context. Event order reflects actual observation order at the synchronized append boundary.
-
-Limitations:
-
-- new OS threads do not automatically inherit context-variable state,
-- multiprocessing and separate processes have independent sessions,
-- Prompt 02 is not distributed tracing,
-- no cross-process ordering contract exists.
-
-## 10. Nested sessions
-
-Nested top-level capture sessions are rejected in the MVP. This avoids ambiguous active-session routing and accidental cross-case event attribution.
-
-Future explicit child-span or child-case semantics may be designed separately rather than emerging accidentally from context nesting.
-
-## 11. Tool helper semantics
+## 7. `@capture_tool` transparency
 
 `@capture_tool` supports synchronous functions only.
 
-With an active session it attempts to record:
+With an active session it best-effort observes:
 
 ```text
-tool.call → function execution → tool.result
+tool.call -> wrapped function exactly once -> tool.result
 ```
 
-If the function raises, the helper records a failed `tool.result` and an `exception` event when capture remains available, then re-raises the original exception.
+Signature binding is an observation attempt, not a substitute for Python invocation. Binding failures are suppressed and the wrapped function is still invoked normally, so missing and duplicate argument errors originate from normal function call semantics.
 
-Without an active session the wrapped function behaves normally.
+For valid calls, omitted defaults and `*args`/`**kwargs` shapes are observed when normalization succeeds.
 
-Capture-helper failures are not allowed to replace the wrapped function's return value or application exception. Unsupported async decoration fails explicitly rather than pretending to work.
+If the wrapped function raises, best-effort failure/result events are attempted and the original exception object is re-raised. Unexpected capture-side `BaseException` failures cannot replace it. A successful wrapped return object is returned unchanged even when result capture fails.
 
-## 12. Performance posture
+Without an active session the wrapped function is called directly.
 
-Prompt 02 is not a high-volume tracing benchmark. The implementation nevertheless avoids repeatedly serializing the entire case on each event and uses append-only event construction with constant-time event lookup by ID.
+## 8. Provider adapter boundary
 
-Canonical serialization happens at final persistence time.
+Provider integrations emit through Capture Session contracts. The initial OpenAI adapter is explicit, instance-local, synchronous, and limited to `responses.create` and `chat.completions.create`.
 
-## 13. Known limitations
+Adapters must report degraded observation honestly. Unsupported provider values are omitted rather than stored through arbitrary representations. Adapter failures may not create additional provider calls or replace provider results/exceptions.
 
-- no transparent provider interception,
-- no framework adapters,
-- no subprocess `record` command,
-- no async tool decorator,
-- no automatic thread-context propagation,
-- no distributed tracing,
-- no guarantee that default redaction finds every secret or any particular PII class,
-- no replay, diff, or regression execution.
+## 9. Ordering and concurrency
+
+One builder owns one append-only event list and synchronized sequence allocator. `contextvars` lets ordinary asyncio tasks created in an active context inherit the session context.
+
+New OS threads do not automatically inherit context-variable state. Multiprocessing and separate processes remain independent. There is no cross-process ordering or distributed tracing claim.
+
+## 10. Nested sessions
+
+Nested top-level capture sessions are rejected. Explicit child-span or child-case semantics must be designed separately rather than emerging accidentally from context nesting.
+
+## 11. Performance posture
+
+The implementation avoids serializing the full case per event and uses append-only construction with constant-time event lookup by ID. Canonical serialization happens at final persistence time.
+
+## 12. Known limitations
+
+- no transparent arbitrary-process or subprocess recording;
+- no automatic framework interception;
+- no async tool decorator;
+- no automatic thread-context propagation;
+- no distributed tracing;
+- no guarantee default redaction finds every secret or PII class.
+
+Replay, diff, and regression are implemented in separate package boundaries and are documented in the project charter, MVP scope, system architecture, and replay safety model.
