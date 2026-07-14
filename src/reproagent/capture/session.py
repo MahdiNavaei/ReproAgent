@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import traceback as traceback_module
+from contextlib import suppress
 from contextvars import Token
 from enum import StrEnum
 from pathlib import Path
@@ -18,7 +19,6 @@ from reproagent.agentcase import atomic_dump_agentcase
 from reproagent.capture.builder import AgentCaseBuilder
 from reproagent.capture.context import reset_current_session, set_current_session
 from reproagent.capture.errors import (
-    CaptureError,
     CaptureLifecycleError,
     CaptureNormalizationError,
     CapturePersistenceError,
@@ -139,40 +139,59 @@ class CaptureSession:
         exc: BaseException | None,
         tb: Any,
     ) -> Literal[False]:
-        capture_failure: BaseException | None = None
+        capture_failures: list[BaseException] = []
+
+        def remember_capture_failure(failure: BaseException) -> None:
+            capture_failures.append(failure)
+            with suppress(BaseException):
+                self._builder.set_completeness(
+                    CaptureCompleteness.PARTIAL,
+                    reason=(
+                        "capture instrumentation failed while preserving an application exception"
+                    ),
+                )
+
         try:
             if exc is not None and self._state == CaptureSessionState.ACTIVE:
                 if id(exc) not in self._captured_exception_ids:
                     try:
                         self.exception(exc, handled=False)
-                    except CaptureError as capture_exc:
-                        capture_failure = capture_exc
-                if self._builder.outcome in {
-                    ExecutionOutcome.UNKNOWN,
-                    ExecutionOutcome.SUCCESS,
-                }:
-                    self._builder.set_outcome(ExecutionOutcome.FAILURE)
+                    except BaseException as capture_exc:
+                        remember_capture_failure(capture_exc)
+                try:
+                    if self._builder.outcome in {
+                        ExecutionOutcome.UNKNOWN,
+                        ExecutionOutcome.SUCCESS,
+                    }:
+                        self._builder.set_outcome(ExecutionOutcome.FAILURE)
+                except BaseException as capture_exc:
+                    remember_capture_failure(capture_exc)
 
             if self._state == CaptureSessionState.ACTIVE:
                 try:
                     self.finalize()
                 except BaseException as finalize_exc:
-                    capture_failure = capture_failure or finalize_exc
+                    remember_capture_failure(finalize_exc)
         finally:
             if self._context_token is not None:
-                reset_current_session(self._context_token)
+                token = self._context_token
                 self._context_token = None
+                try:
+                    reset_current_session(token)
+                except BaseException as reset_exc:
+                    remember_capture_failure(reset_exc)
 
         if exc is not None:
-            if capture_failure is not None:
-                exc.add_note(
-                    "ReproAgent capture also failed while preserving the original application "
-                    f"exception ({type(capture_failure).__name__})."
-                )
+            for failure in capture_failures:
+                with suppress(BaseException):
+                    exc.add_note(
+                        "ReproAgent capture also failed while preserving the original application "
+                        f"exception ({type(failure).__name__})."
+                    )
             return False
 
-        if capture_failure is not None:
-            raise capture_failure
+        if capture_failures:
+            raise capture_failures[0]
         return False
 
     def message(

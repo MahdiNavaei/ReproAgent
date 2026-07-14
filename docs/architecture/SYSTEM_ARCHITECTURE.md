@@ -2,139 +2,126 @@
 
 ## Architecture baseline
 
-ReproAgent is a lightweight Python package with a portable data artifact at its center.
+ReproAgent is a lightweight local-first Python package with a portable data artifact at its center.
 
 ```text
-User instrumentation / future adapters
-                 |
-                 v
+manual instrumentation / selected adapters
+                 ↓
           Capture Session
-                 |
-                 v
-      Normalized event payloads
-                 |
-                 v
-       Redaction before retention
-                 |
-                 v
-      Ordered AgentCase builder
-                 |
-                 v
-      Provider-neutral Domain Model
-                 |
-                 v
+                 ↓
+      normalization + redaction
+                 ↓
+       ordered AgentCase builder
+                 ↓
           AgentCase v0 JSON
-           /      |      \
-          v       v       v
-       Inspect   Replay   Diff        (replay and diff are future)
-                          |
-                          v
-                   Regression Tests    (future)
+          /       |        \
+         ↓        ↓         ↓
+     inspect   mock replay   diff
+                 execution    ↓
+                    ↓       regression
+          caller-supplied local code
+          + recorded substitutions
 ```
 
 ## Current package boundaries
 
 ### `reproagent.domain`
 
-Owns provider-neutral, framework-neutral validated domain types and enums. It has no network behavior and does not import capture or integration implementation.
+Owns provider-neutral, framework-neutral validated domain types and enums. It has no network behavior and does not import capture or provider integrations.
 
 ### `reproagent.agentcase`
 
-Owns the data-only `.agentcase` serialization boundary: bounded file loading, format header checks, model validation, deterministic canonical serialization, atomic local publication, and human-readable summaries.
+Owns bounded data-only `.agentcase` loading, format validation, deterministic canonical serialization, atomic local publication, and summaries.
 
 ### `reproagent.capture`
 
-Owns the first real execution capture path: explicit manual Python instrumentation, lifecycle control, normalized payload contracts, ordered event creation, capture diagnostics, context-local active-session access, and synchronous tool convenience instrumentation.
+Owns explicit execution capture, lifecycle control, normalized payload contracts, ordered event creation, capture diagnostics, context-local active sessions, and synchronous `@capture_tool` instrumentation. Capture-side failures are best effort and may not replace an application exception that is already propagating.
 
-### `reproagent.security`
+### `reproagent.integrations`
 
-Owns the current best-effort redaction pipeline and additive user-defined redaction-rule extension point.
+Owns opt-in provider adapters. The initial OpenAI adapter wraps one synchronous client instance and only captures `responses.create` and `chat.completions.create`. It does not monkeypatch the SDK or discover API keys. Unsupported values are omitted with degraded completeness rather than stored through arbitrary object representations. Streaming responses pass through unchanged and are not represented as complete responses.
+
+### `reproagent.replay`
+
+Owns validated mock replay contracts. `run_mock_replay` executes one caller-supplied local callable against `MockReplayContext`. The context substitutes recorded model outputs and tool results, matches them in recorded order, and fails closed with no live fallback. ReproAgent never obtains executable code from AgentCase data.
+
+`mock_replay` is a separate replay-provenance artifact projection. It copies validated events as data and does not execute user code.
+
+### `reproagent.diff`
+
+Owns deterministic exact, structural, and normalized JSON-data comparison.
+
+### `reproagent.regression`
+
+Owns AgentCase regression comparison and assertions. Default volatility removal is limited to known AgentCase schema locations; identically named fields inside event payloads remain business data.
 
 ### `reproagent.cli`
 
-Owns the thin local command-line adapter. It delegates validation and inspection to the core package and contains no provider logic.
-
-Replay, diff, regression execution, and provider/framework integration packages are intentionally not implemented yet.
+Owns the thin local CLI for version, validation, inspection, and mock replay artifact projection. It contains no provider logic and does not expose live replay.
 
 ## Dependency direction
 
 ```text
-user instrumentation / future integrations
-                 ↓
-              capture
-                 ↓
-       normalization + builder
-                 ↓
-              domain
-                 ↓
-             agentcase
-
-cli → agentcase → domain
-capture → security
-capture → agentcase
-capture → domain
+integrations / user instrumentation → capture
+capture → security + agentcase + domain
+replay → domain
+regression → diff + domain
+cli → agentcase + replay
+agentcase → domain
 ```
 
-The domain package does not depend on capture, CLI, security implementation, or integrations. AgentCase serialization does not depend on provider SDKs.
-
-## Python support baseline
-
-The package requires Python 3.11 or newer. Python 3.11 is the minimum supported version so the project does not begin on a runtime close to upstream end of life while still covering modern supported interpreter lines in CI.
-
-## Validation approach
-
-Pydantic v2 remains the single runtime dependency. It provides typed public domain models, strict normalized payload models, deterministic validation errors, and rejection of unknown schema fields. The wire format remains plain JSON and is documented independently from Pydantic.
+The domain package does not depend on capture, CLI, security implementation, replay, diff, regression, or provider SDKs. The OpenAI SDK remains an optional integration dependency rather than a core runtime dependency.
 
 ## Artifact boundary
 
-AgentCase v0 is UTF-8 JSON. Loading does not execute Python code or reconstruct arbitrary Python objects. Unknown top-level fields are rejected. Controlled evolution is available through explicit `extensions` maps whose values are preserved as data but are not treated as verified core semantics.
+AgentCase v0 is bounded UTF-8 JSON. Loading does not execute Python code or reconstruct arbitrary Python objects. Unknown top-level fields are rejected. Namespaced extension values are preserved as data but are not treated as verified core semantics.
 
-## Deterministic serialization
+Canonical serialization uses UTF-8, sorted object keys, compact separators, no NaN or Infinity, normalized JSON forms for UUIDs/enums/datetimes, and one trailing newline.
 
-Canonical serialization uses:
+## Capture architecture
 
-- UTF-8,
-- sorted object keys,
-- compact separators,
-- no NaN or Infinity,
-- normalized JSON forms for UUIDs, enums, and datetimes,
-- one trailing newline.
+The Capture Engine is explicit and framework neutral:
 
-Deterministic serialization means the same validated semantic model produces the same bytes under the same AgentCase format rules. It does not mean two independent live executions are behaviorally deterministic.
+1. user code or an adapter calls the Capture Session API;
+2. normalized payload models validate common semantics;
+3. redaction runs before observed payload data is retained;
+4. one ordered builder allocates event sequences and validates parents;
+5. capture health and degradation remain explicit;
+6. the builder constructs the public AgentCase model;
+7. persistence uses deterministic serialization and atomic local publication.
 
-## Current capture architecture
+Capture diagnostics are recorded under `org.reproagent.capture/v1`.
 
-The first Capture Engine is explicit and framework neutral:
+## Instrumentation transparency
 
-1. user code or a future adapter calls the public Capture Session API,
-2. strict normalized payload models validate common semantics,
-3. redaction runs before observed payload data is retained,
-4. one ordered builder allocates event sequences and validates parents,
-5. the builder constructs the same public `AgentCase` domain model used everywhere else,
-6. persistence uses deterministic serialization and atomic local publication.
+`CaptureSession.__exit__` treats an already-propagating application exception as primary. Unexpected capture-side `BaseException` failures during exception observation, outcome update, finalization, or context reset are retained only as safe notes when possible and cannot become the raised primary exception.
 
-Capture diagnostics are recorded under the namespaced extension `org.reproagent.capture/v1` rather than changing the AgentCase `0.1` root schema.
+`@capture_tool` executes the wrapped function exactly once. Signature binding and event recording are observation attempts, not replacement invocation validation. Missing or duplicate arguments therefore retain normal Python call semantics. Successful return objects and raised exception objects are preserved.
+
+## Replay architecture
+
+A validated AgentCase is never an executable program. The current execution replay API requires the caller to provide a local callable directly:
+
+```text
+validated AgentCase + explicit callable
+                 ↓
+          MockReplayContext
+                 ↓
+ next recorded request/call must match
+                 ↓
+ recorded response/result returned as data
+```
+
+No source-module path, entrypoint string, or recorded code from AgentCase is imported. Missing or mismatched interactions raise `ReplayContractError`; there is no provider or tool fallback. The caller-owned callable itself is ordinary local Python and is not sandboxed.
+
+## Regression architecture
+
+Generic diff still supports caller-selected recursive ignored keys. AgentCase regression defaults do not use recursive name-only ignoring. They normalize only root `case_id`, `execution_id`, `created_at`, `replay`, and event-envelope `event_id`, `parent_event_id`, and `timestamp` locations before diff. Payload fields with those names remain visible to regression checks.
 
 ## Concurrency boundary
 
-The active session uses `contextvars`, not one unsafe process-global mutable value. Ordinary asyncio tasks created inside the active context inherit the session context. Event append operations use one synchronized sequence allocator.
+Active capture uses `contextvars`; ordinary asyncio tasks created inside an active context inherit the session. Event append uses one synchronized sequence allocator. New OS threads do not automatically inherit the context and separate processes remain independent.
 
-New OS threads do not automatically inherit context-variable state. Multiprocessing and separate processes remain independent. Prompt 02 does not claim distributed tracing.
+## Current limitations
 
-## Future integration architecture
-
-Provider and framework adapters will observe their native callbacks or SDK behavior and emit through the same Capture Session API. They must normalize common semantics before using namespaced extensions and must report unsupported or degraded observations explicitly.
-
-No current code monkeypatches provider SDKs, HTTP clients, frameworks, or subprocesses.
-
-## Future replay architecture
-
-Replay will consume a validated AgentCase plus an explicit replay plan. The plan selects mock, live, or differential mode and records substitutions and unresolved dependencies. Mock replay and live replay must be separate code paths at the command boundary; no fallback may silently cross that boundary.
-
-## Future diff architecture
-
-Diff will expose layered comparators rather than one opaque score. Exact and structural comparison remain deterministic. Normalized comparison applies documented canonicalization rules. Semantic comparison is optional and additive.
-
-## Future test architecture
-
-Regression assertions should operate on validated AgentCase and replay results through a small public assertion API. A future pytest plugin can be an optional integration rather than a core runtime dependency.
+There is no transparent arbitrary-process recording, async OpenAI capture, automatic thread propagation, distributed tracing, live replay, side-effecting tool replay, differential replay execution, semantic-model diff, hosted service, or SaaS control plane.
