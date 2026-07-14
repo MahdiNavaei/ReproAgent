@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from math import isclose
-from typing import Any
+from typing import TypeGuard
 
 JsonValue = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 
@@ -190,12 +190,12 @@ def _key_path(path: str, key: str) -> str:
     return f"{path}.{key}" if key.isidentifier() else f"{path}[{key!r}]"
 
 
-def _is_mapping(value: Any) -> bool:
-    return isinstance(value, Mapping)
+def _is_mapping(value: JsonValue) -> TypeGuard[dict[str, JsonValue]]:
+    return isinstance(value, dict)
 
 
-def _is_sequence(value: Any) -> bool:
-    return isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))
+def _is_sequence(value: JsonValue) -> TypeGuard[list[JsonValue]]:
+    return isinstance(value, list)
 
 
 __all__ = ["DiffMode", "DiffResult", "Difference", "JsonValue", "compare"]
