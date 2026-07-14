@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Generic, Literal, TypeVar
 
 from pydantic import JsonValue
-
 from reproagent.domain import AgentCase, Event, EventType
 from reproagent.replay.errors import ReplayContractError
 from reproagent.replay.mock import validate_mock_replay_source
@@ -164,7 +163,9 @@ def _interaction_tape(case: AgentCase) -> list[_RecordedInteraction]:
                 _RecordedInteraction("model", event, terminal_by_parent[event.event_id])
             )
         elif event.event_type == EventType.TOOL_CALL:
-            interactions.append(_RecordedInteraction("tool", event, terminal_by_parent[event.event_id]))
+            interactions.append(
+                _RecordedInteraction("tool", event, terminal_by_parent[event.event_id])
+            )
     return interactions
 
 
