@@ -109,13 +109,13 @@ def _case_with_unanswered_model_request() -> AgentCase:
     )
 
 
-def test_mock_replay_copies_events_as_data_and_records_provenance() -> None:
+def test_mock_replay_projects_same_execution_and_records_provenance() -> None:
     source = _complete_case()
 
     replayed = mock_replay(source)
 
     assert replayed.case_id != source.case_id
-    assert replayed.execution_id != source.execution_id
+    assert replayed.execution_id == source.execution_id
     assert replayed.events == source.events
     assert replayed.replay is not None
     assert replayed.replay.source_case_id == source.case_id

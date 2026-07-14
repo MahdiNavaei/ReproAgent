@@ -11,22 +11,33 @@ requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [
-  { name = "ReproAgent contributors" }
+  { name = "Mahdi Navaei" }
+]
+maintainers = [
+  { name = "Mahdi Navaei" }
 ]
 keywords = ["ai", "agents", "debugging", "replay", "regression-testing", "llm"]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development :: Testing",
   "Typing :: Typed",
 ]
 dependencies = [
   "pydantic>=2.10,<3",
 ]
+
+[project.urls]
+Homepage = "https://github.com/MahdiNavaei/ReproAgent"
+Repository = "https://github.com/MahdiNavaei/ReproAgent"
+Issues = "https://github.com/MahdiNavaei/ReproAgent/issues"
+Documentation = "https://github.com/MahdiNavaei/ReproAgent#readme"
 
 [project.optional-dependencies]
 dev = [

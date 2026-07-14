@@ -1,0 +1,52 @@
+name: Feature request
+description: Propose a focused improvement to the ReproAgent product journey
+title: "feat: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ReproAgent stays deliberately narrow. Strong requests start from a reproducible agent-debugging or regression problem, not a broad framework checklist.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What failure or maintenance problem are you trying to solve?
+      description: Describe the concrete agent execution, replay, comparison, or regression pain.
+    validations:
+      required: true
+  - type: dropdown
+    id: journey
+    attributes:
+      label: Which part of the product journey does this improve?
+      options:
+        - Capture
+        - AgentCase portability / compatibility
+        - Mock replay execution
+        - Diff
+        - Regression testing
+        - Provider / framework integration
+        - Security / redaction
+        - Developer experience
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: What do you do today?
+      description: Explain the workaround or current debugging flow.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Smallest useful capability
+      description: Describe the smallest coherent behavior that would solve the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and compatibility considerations
+      description: Note any provider calls, tool side effects, AgentCase format implications, or sensitive-data concerns.
+    validations:
+      required: true

@@ -36,28 +36,32 @@ A captured tool call can represent a destructive action. The existence of record
 
 ### Accidental live side effects
 
-A future replay engine must distinguish recorded/mock interactions from live execution. A mock replay may not silently fall back to a network call or tool invocation. Live actions require explicit user intent and an explicit replay mode.
+Current mock replay is fail closed and has no live provider or recorded-tool fallback. Any future live replay mode must remain a separate explicit execution decision and must never be inferred from opening, validating, inspecting, diffing, or mock-replaying an AgentCase.
+
+The explicit local `run_mock_replay` entrypoint is caller-supplied ordinary Python and is not sandboxed. ReproAgent guarantees recorded substitution only for interactions routed through `MockReplayContext`; callers remain responsible for their own code outside that context.
 
 ## Implemented redaction baseline
 
-Prompt 02 implements best-effort redaction before observed capture data is retained by the AgentCase builder.
+The current implementation applies best-effort redaction before observed capture data is retained by the AgentCase builder.
 
 ### Structured sensitive-key redaction
 
-Case-insensitive key matching covers common forms including:
+Sensitive-key matching canonicalizes casing and common separators while retaining exact canonical-name matching. This covers common forms including:
 
-- `authorization`,
-- `proxy-authorization`,
-- `api_key` / `api-key`,
-- `x-api-key`,
-- `token`,
-- `access_token`,
-- `refresh_token`,
-- `password` / `passwd`,
-- `secret`,
-- `client_secret`,
-- `cookie` / `set-cookie`,
+- `authorization` and casing/separator variants;
+- `proxy-authorization`;
+- `api_key` / `api-key` / `apiKey`;
+- `x-api-key`;
+- `token`;
+- `access_token`;
+- `refresh_token`;
+- `password` / `passwd`;
+- `secret`;
+- `client_secret`;
+- `cookie` / `set-cookie`;
 - `connection_string`.
+
+Nearby names such as `token_count`, `secretary`, and `authorization_mode` are not broadly redacted merely because they contain a sensitive substring.
 
 The matching is intentionally conservative and is not a complete secret scanner.
 
@@ -65,7 +69,7 @@ The matching is intentionally conservative and is not a complete secret scanner.
 
 The default implementation includes conservative high-confidence patterns for:
 
-- bearer-token shaped strings,
+- bearer-token shaped strings;
 - `sk-...` style API keys.
 
 Users and future adapters can add string rules without replacing the defaults.
@@ -74,8 +78,8 @@ Users and future adapters can add string rules without replacing the defaults.
 
 The redactor traverses JSON-safe dictionaries and lists, produces new values rather than mutating caller-owned input objects, and records only:
 
-- the redacted field path,
-- the rule identifier,
+- the redacted field path;
+- the rule identifier;
 - the irreversible replacement marker.
 
 Original secret values are never copied into redaction metadata.
@@ -100,13 +104,21 @@ This is a backward-compatible clarification of the existing `field_path` string 
 
 If redaction fails for an observed event:
 
-- the known raw event payload is not retained by default,
-- the event is counted as dropped,
-- capture completeness becomes at least `partial`,
-- a safe diagnostic records the event type and failure category,
+- the known raw event payload is not retained by default;
+- the event is counted as dropped;
+- capture completeness becomes at least `partial`;
+- a safe diagnostic records the event type and failure category;
 - the secret or raw payload is not copied into diagnostics.
 
 If explicit user metadata cannot be redacted during session construction, Capture Session creation fails rather than retaining the raw metadata.
+
+## Provider-integration normalization boundary
+
+The synchronous OpenAI adapter does not retain unsupported request or response objects through arbitrary `repr` strings. Unsupported values are omitted and capture completeness is degraded with a constant safe diagnostic reason.
+
+Synchronous `stream=True` results are passed through unchanged and are not eagerly consumed or represented as a complete `model.response` before stream consumption. Capture completeness is degraded because streaming event capture is unsupported in the initial release.
+
+Provider exceptions remain primary. ReproAgent makes no additional provider call to recover capture data.
 
 ## Capture diagnostics
 
@@ -134,20 +146,25 @@ This prevents an interrupted normal write from leaving a target path that looks 
 
 The current implementation establishes and tests:
 
-- strict data validation,
-- bounded default AgentCase loading,
-- data-only JSON parsing,
-- no arbitrary Python-object deserialization,
-- no automatic environment dump,
-- redaction-before-retention for Capture Session payloads and explicit user metadata,
-- fail-closed handling for tested redaction failures,
-- original-secret absence in tested serialized outputs and redaction metadata,
-- no hidden network calls in the manual capture path.
+- strict data validation;
+- bounded default AgentCase loading;
+- data-only JSON parsing;
+- no arbitrary Python-object deserialization;
+- no automatic environment dump;
+- redaction-before-retention for Capture Session payloads and explicit user metadata;
+- separator/casing sensitive-key regression coverage;
+- fail-closed handling for tested redaction failures;
+- original-secret absence in tested serialized outputs and redaction metadata;
+- unsupported OpenAI-object omission without arbitrary `repr` retention;
+- synthetic authorization/API-key and provider-exception secret absence in OpenAI hardening tests;
+- no hidden network calls in the manual capture path;
+- no extra provider calls introduced by the OpenAI adapter.
 
 It does **not** guarantee:
 
-- removal of every secret,
-- removal of PII,
-- that an AgentCase is safe to publish,
-- that every future integration has the same capture coverage,
-- that a validated AgentCase is safe to replay.
+- removal of every secret;
+- removal of PII;
+- that an AgentCase is safe to publish;
+- that every future integration has the same capture coverage;
+- sandboxing of caller-supplied local replay code;
+- that a validated AgentCase is safe to use as authorization for side effects.

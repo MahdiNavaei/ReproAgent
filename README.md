@@ -1,54 +1,74 @@
 # ReproAgent
 
+[![CI](https://github.com/MahdiNavaei/ReproAgent/actions/workflows/ci.yml/badge.svg)](https://github.com/MahdiNavaei/ReproAgent/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.11%2B-3776AB)
+![License](https://img.shields.io/badge/license-Apache--2.0-blue)
+![Typing](https://img.shields.io/badge/typing-py.typed-informational)
+
 > **The open-source flight recorder for AI agents. Capture failures. Replay them safely. Compare executions. Prevent regressions.**
 
-ReproAgent is a local-first Python toolkit for turning difficult AI-agent executions into portable, versioned AgentCases that can be inspected, replayed under explicit offline contracts, compared deterministically, and used as regression fixtures.
+Your agent failed once. ReproAgent turns that execution into a portable, versioned **AgentCase** that you can inspect, replay under an explicit offline contract, compare deterministically, and keep as a regression fixture.
 
 ```text
 Record -> AgentCase / Failure Capsule -> Mock Replay -> Diff -> Regression Test
 ```
 
-ReproAgent is not a generic agent framework, hosted observability platform, prompt-management system, model gateway, or SaaS control plane.
+ReproAgent is local first. The core artifact is a JSON file, not a row in a hosted database and not an account in a SaaS control plane.
 
-## Current initial-release scope
+## Why this exists
 
-### AgentCase and capture
+Agent failures are unusually easy to lose.
 
-- AgentCase format `0.1` open specification
-- provider-neutral and framework-neutral domain models
-- deterministic `.agentcase` JSON serialization
-- strict loading, format validation, event ordering, identity, and parent-reference integrity checks
-- bounded input loading and atomic local persistence
-- explicit framework-neutral Python `CaptureSession`
-- execution, message, model, tool, retry, exception, and logical-failure capture
-- independent execution-outcome and capture-completeness semantics
-- best-effort redaction before persistence
-- context-local active sessions
-- synchronous `@capture_tool` helper that preserves normal Python invocation, return, and exception behavior
+A model chooses the wrong tool once. A provider upgrade changes a response shape. One tool argument is subtly different. A retry changes execution order. By the time someone opens the tracing dashboard, the exact context that produced the failure is gone or painful to reconstruct.
 
-### OpenAI Python SDK integration
+Logs and traces are excellent for answering **what happened?** ReproAgent is focused on the next questions:
 
-- explicit instance-local `capture_openai(client)` wrapper
-- synchronous `OpenAI.responses.create(...)` capture
-- synchronous `OpenAI.chat.completions.create(...)` capture
-- no global monkeypatching, environment-variable discovery, or API-key discovery
-- provider calls execute exactly once through the wrapped resource
-- provider exceptions re-raised unchanged
-- unsupported normalization omits unsafe data and degrades capture completeness
-- no arbitrary `repr` fallback for unsupported SDK objects
-- `stream=True` responses pass through unchanged, are not eagerly consumed, do not create fake complete model responses, and mark capture degraded
-- fake-client fault/security tests plus real `openai>=2,<3` SDK compatibility tests using offline `httpx.MockTransport`
+- can I preserve this failure as a portable test artifact?
+- can I re-run supported local code without calling the provider or executing the recorded tool again?
+- can I compare this execution with another one deterministically?
+- can CI tell me when this failure shape comes back?
 
-Async OpenAI SDK capture is not implemented.
+ReproAgent complements logging, tracing, and observability systems. It is not trying to replace them.
 
-See [`docs/integrations/OPENAI_PYTHON_SDK.md`](docs/integrations/OPENAI_PYTHON_SDK.md).
+## The core idea
 
-### Safe mock replay
+An **AgentCase** is a bounded, data-only record of an agent execution.
 
-The supported execution replay API is explicit:
+It captures ordered execution evidence such as model requests and responses, tool calls and results, retries, exceptions, outcome, capture completeness, redaction metadata, and replay provenance.
+
+That artifact can move from a debugging session into code review and regression tests without requiring ReproAgent-hosted storage.
+
+## A quick tour
+
+### 1. Capture an execution
 
 ```python
+from reproagent.capture import capture
+
+with capture(output="failure.agentcase", name="example-agent") as session:
+    request_id = session.model_request(
+        provider="example-provider",
+        model="example-model",
+        input={"prompt": "hello"},
+    )
+
+    session.model_response(
+        parent_event_id=request_id,
+        provider="example-provider",
+        model="example-model",
+        output={"text": "hi"},
+    )
+```
+
+On context exit ReproAgent finalizes a validated AgentCase and persists it atomically when an output path is configured.
+
+### 2. Replay supported local code against recorded interactions
+
+```python
+from reproagent.agentcase import load_agentcase
 from reproagent.replay import MockReplayContext, run_mock_replay
+
+case = load_agentcase("failure.agentcase")
 
 
 def local_agent(replay: MockReplayContext) -> str:
@@ -60,107 +80,54 @@ def local_agent(replay: MockReplayContext) -> str:
     return str(output)
 
 
-result = run_mock_replay(recorded_case, local_agent)
+result = run_mock_replay(case, local_agent)
+print(result.value)
 ```
 
-`run_mock_replay` re-executes only the local callable supplied directly by the caller. ReproAgent never imports or executes an entrypoint from AgentCase data. Model and tool interactions requested through `MockReplayContext` must match the next recorded interaction and return recorded outputs/results as data.
+`run_mock_replay` executes only the local callable you explicitly supply. Model and tool interactions requested through `MockReplayContext` must match the next recorded interaction and return recorded outputs or results as data.
 
-The runner is fail closed:
+There is no live provider or recorded-tool fallback.
 
-- no provider calls
-- no recorded tool execution
-- no recorded-code imports
-- no live fallback
-- missing or mismatched interactions raise `ReplayContractError`
-- a successful run must consume all recorded model/tool interactions
-
-The caller-supplied local callable is ordinary Python and is not sandboxed. The replay guarantee applies to dependencies explicitly routed through `MockReplayContext`.
-
-A separate `mock_replay(case)` API and `reproagent replay ... --mock` CLI command create a replay-provenance AgentCase projection. They copy validated recorded events as data; they do **not** re-execute application code.
-
-### Layered diff and regression
-
-- exact, structural, and normalized deterministic diff
-- stable JSONPath-like difference locations
-- configurable floating-point tolerance
-- `compare_agentcases()` and `assert_agentcase_regression()`
-- auto-discovered pytest fixture `agentcase_regression`
-
-Regression defaults remove volatility only from known AgentCase schema locations: root case/execution identity, root creation/replay provenance, and event-envelope identity/parent/timestamps. Payload fields named `timestamp`, `event_id`, or `replay` remain business data and still produce regressions when changed.
-
-Semantic-model comparison is not included.
-
-### CLI
-
-Implemented commands:
-
-```bash
-reproagent --version
-reproagent validate <case.agentcase>
-reproagent inspect <case.agentcase>
-reproagent replay <case.agentcase> --mock --output <output.agentcase>
-```
-
-The replay CLI is the data-only replay artifact projection described above. There is no live replay. Diff and regression are Python APIs rather than dedicated CLI commands.
-
-## Requirements and development
-
-ReproAgent requires Python 3.11 or newer. CI exercises Python 3.11, 3.12, 3.13, and 3.14.
-
-```bash
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-python -m pip install -e ".[dev]"
-```
-
-Optional runtime extras:
-
-```bash
-python -m pip install -e ".[openai]"
-python -m pip install -e ".[pytest]"
-```
-
-The development extra includes the declared OpenAI SDK dependency so the advertised synchronous SDK surfaces are tested offline in CI.
-
-## Manual capture
+### 3. Compare and keep the failure in CI
 
 ```python
-from reproagent.capture import capture
+from reproagent import DiffMode, assert_agentcase_regression, compare
 
-with capture(output="runs/example.agentcase", name="example-agent") as session:
-    session.message(role="user", content="Find order 123")
+result = compare(
+    baseline_data,
+    candidate_data,
+    mode=DiffMode.NORMALIZED,
+)
 
-    request_id = session.model_request(
-        provider="example-provider",
-        model="example-model",
-        input={"messages": [{"role": "user", "content": "Find order 123"}]},
-    )
+for difference in result.differences:
+    print(difference.path, difference.kind)
 
-    response_id = session.model_response(
-        parent_event_id=request_id,
-        provider="example-provider",
-        model="example-model",
-        output={"message": {"role": "assistant", "content": "I will look it up."}},
-    )
-
-    tool_call_id = session.tool_call(
-        parent_event_id=response_id,
-        name="lookup_order",
-        arguments={"order_id": "123"},
-    )
-    session.tool_result(
-        parent_event_id=tool_call_id,
-        name="lookup_order",
-        status="success",
-        result={"status": "shipped"},
-    )
+assert_agentcase_regression(baseline_case, observed_case)
 ```
 
-On normal context exit the session records `execution.end`, validates the AgentCase, and persists it when an output path is configured.
+The optional pytest plugin also exposes an auto-discovered `agentcase_regression` fixture.
 
-When an application exception escapes a capture context, that exception remains primary. ReproAgent attempts to observe and finalize the capture, but an unexpected capture-side failure must not replace the original application exception.
+## What works today
 
-## Capture an OpenAI client explicitly
+### AgentCase and capture
+
+- AgentCase format `0.1` open specification
+- provider-neutral and framework-neutral domain models
+- deterministic `.agentcase` JSON serialization
+- strict loading, format validation, event ordering, identity, and parent-reference checks
+- bounded input loading and atomic local persistence
+- explicit framework-neutral Python `CaptureSession`
+- message, model, tool, retry, exception, and logical-failure capture
+- independent execution-outcome and capture-completeness semantics
+- best-effort redaction before persistence
+- context-local active sessions
+- synchronous `@capture_tool` instrumentation that preserves normal Python invocation, return, and exception behavior
+
+When an application exception escapes a capture context, that exception remains primary. Capture-side failures are best effort and must not replace the original application or provider exception.
+
+### OpenAI Python SDK integration
+
+The first provider adapter is explicit and instance local:
 
 ```python
 from openai import OpenAI
@@ -178,30 +145,101 @@ with capture(output="runs/openai.agentcase"):
     )
 ```
 
-Only the supplied synchronous client facade and supported create methods are captured. Other resources are forwarded unchanged.
+Current support:
 
-## Diff and regression
+- synchronous `OpenAI.responses.create(...)`
+- synchronous `OpenAI.chat.completions.create(...)`
+- exactly-once provider calls through the wrapped resource
+- provider exceptions re-raised unchanged
+- no global monkeypatching or API-key discovery
+- unsupported normalization omits unsafe data and degrades capture completeness
+- no arbitrary `repr` fallback for unsupported SDK objects
+- `stream=True` passes the stream through unchanged, does not eagerly consume it, does not create a fake complete `model.response`, and marks capture degraded
+- fake-client fault/security tests
+- real `openai>=2,<3` SDK compatibility tests through offline `httpx.MockTransport`
 
-```python
-from reproagent import DiffMode, compare
+Async OpenAI SDK capture is not implemented.
 
-result = compare(baseline_data, candidate_data, mode=DiffMode.NORMALIZED)
-for difference in result.differences:
-    print(difference.path, difference.kind)
+See [`docs/integrations/OPENAI_PYTHON_SDK.md`](docs/integrations/OPENAI_PYTHON_SDK.md).
+
+### Safe mock replay execution
+
+The supported execution replay API is `run_mock_replay(case, entrypoint)`.
+
+The runner:
+
+- re-executes only a caller-supplied local Python callable
+- never imports an entrypoint from AgentCase data
+- never calls a model provider
+- never executes a recorded tool
+- matches requested model and tool interactions in recorded order
+- fails closed on missing, mismatched, extra, or unconsumed interactions
+- has no live fallback
+
+The caller-supplied callable is ordinary Python and is **not sandboxed**. The replay safety guarantee applies to external interactions routed through `MockReplayContext`.
+
+### Replay artifact projection
+
+A separate `mock_replay(case)` API and the CLI command below create a replay-provenance AgentCase projection:
+
+```bash
+reproagent replay failure.agentcase --mock --output replayed.agentcase
 ```
 
-```python
-from reproagent import assert_agentcase_regression
+This operation copies validated recorded events as data and preserves the source `execution_id` because it does not represent a new application execution. A new `case_id` identifies the derived artifact and replay metadata records the projection.
 
-assert_agentcase_regression(baseline_case, observed_case)
+It does **not** re-execute application code.
+
+### Layered diff and regression
+
+- exact deterministic comparison
+- structural comparison
+- normalized comparison
+- stable JSONPath-like difference locations
+- configurable floating-point tolerance
+- `compare_agentcases()`
+- `assert_agentcase_regression()`
+- auto-discovered pytest fixture `agentcase_regression`
+
+AgentCase regression defaults remove volatility only from known schema locations: root case/execution identity, root creation/replay provenance, and event-envelope identity, parent, and timestamps.
+
+A business payload field named `timestamp`, `event_id`, or `replay` is still comparison data and still produces a regression when changed.
+
+Semantic-model comparison is not included.
+
+## CLI
+
+Implemented commands:
+
+```bash
+reproagent --version
+reproagent validate <case.agentcase>
+reproagent inspect <case.agentcase>
+reproagent replay <case.agentcase> --mock --output <output.agentcase>
 ```
 
-Or use the optional pytest fixture:
+The replay CLI is the data-only replay artifact projection described above. There is no live replay. Diff and regression are Python APIs rather than dedicated CLI commands in the initial release.
 
-```python
-def test_agent_behavior(agentcase_regression, baseline_case, observed_case):
-    agentcase_regression(baseline_case, observed_case)
+## Install from source
+
+ReproAgent requires Python 3.11 or newer.
+
+```bash
+git clone https://github.com/MahdiNavaei/ReproAgent.git
+cd ReproAgent
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python -m pip install -e ".[dev]"
 ```
+
+Optional runtime extras:
+
+```bash
+python -m pip install -e ".[openai]"
+python -m pip install -e ".[pytest]"
+```
+
+The development extra includes the declared OpenAI SDK dependency so the advertised synchronous SDK surfaces are exercised offline in CI.
 
 ## Offline examples
 
@@ -229,16 +267,37 @@ Treat every `.agentcase` as sensitive until independently reviewed.
 
 Capturing data is not permission to replay side effects. Current mock replay never calls providers or executes recorded tools. The explicit caller-supplied local replay callable is not sandboxed, so callers remain responsible for their own code outside `MockReplayContext`.
 
-## AgentCase v0
+Read [`SECURITY.md`](SECURITY.md) and [`docs/architecture/SECURITY_AND_REDACTION_BASELINE.md`](docs/architecture/SECURITY_AND_REDACTION_BASELINE.md).
 
-An `.agentcase` file is a bounded UTF-8 JSON data artifact. Loading, inspection, diff, regression comparison, replay artifact projection, and construction of a replay context do not deserialize arbitrary Python objects or execute AgentCase-provided code.
+## Project status
 
-See:
+ReproAgent is an **alpha-stage `0.1.x` project** with a deliberately narrow initial release boundary.
 
-- [`docs/specs/AGENTCASE_SPEC_V0.md`](docs/specs/AGENTCASE_SPEC_V0.md)
-- [`docs/specs/CAPTURE_EVENT_PAYLOADS_V0.md`](docs/specs/CAPTURE_EVENT_PAYLOADS_V0.md)
+The working core is present and tested, but the Python APIs may still evolve. AgentCase format compatibility is treated separately from package API versioning: incompatible wire-format changes require an explicit version and compatibility decision rather than silent reinterpretation.
 
-## Architecture
+The project is intentionally choosing depth over a checklist of agent frameworks.
+
+## Roadmap
+
+Near-term work is driven by reproducible failure cases, compatibility pressure, security boundaries, and integration demand that can be tested offline.
+
+Current priorities include learning from sanitized real-world failure shapes, maintaining OpenAI SDK compatibility, evaluating async capture, improving replay mismatch ergonomics, making regression reports easier to review in CI, and protecting AgentCase compatibility.
+
+See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the focused roadmap and explicit non-goals.
+
+## Support the project
+
+ReproAgent is independently maintained.
+
+The most valuable support today is to try it on difficult agent failures, report minimal reproducible problems, contribute synthetic or independently sanitized failure shapes, improve compatibility tests, and share the project with engineers who debug agent systems.
+
+If ReproAgent becomes useful to you or your team, sponsorship can help sustain SDK compatibility, security review, AgentCase compatibility, regression fixtures, documentation, and carefully scoped integrations.
+
+Only funding links displayed by GitHub for this repository or committed in `.github/FUNDING.yml` should be treated as official funding destinations.
+
+See [`SUPPORT.md`](SUPPORT.md) for support and sustainability guidance.
+
+## Architecture and specifications
 
 Start with:
 
@@ -248,6 +307,8 @@ Start with:
 - [`docs/architecture/CAPTURE_ENGINE.md`](docs/architecture/CAPTURE_ENGINE.md)
 - [`docs/architecture/SECURITY_AND_REDACTION_BASELINE.md`](docs/architecture/SECURITY_AND_REDACTION_BASELINE.md)
 - [`docs/architecture/REPLAY_SAFETY_MODEL.md`](docs/architecture/REPLAY_SAFETY_MODEL.md)
+- [`docs/specs/AGENTCASE_SPEC_V0.md`](docs/specs/AGENTCASE_SPEC_V0.md)
+- [`docs/specs/CAPTURE_EVENT_PAYLOADS_V0.md`](docs/specs/CAPTURE_EVENT_PAYLOADS_V0.md)
 
 ## Quality checks
 
@@ -259,7 +320,7 @@ mypy src/reproagent
 python -m build
 ```
 
-GitHub Actions runs lint, formatting, strict typing, package build verification, and the offline test suite across the supported Python matrix.
+GitHub Actions runs lint, formatting, strict typing, package-build verification, and the offline test suite across Python 3.11, 3.12, 3.13, and 3.14.
 
 ## Known initial-release limitations
 
@@ -271,13 +332,17 @@ GitHub Actions runs lint, formatting, strict typing, package build verification,
 - There is no live provider replay or side-effecting recorded-tool replay.
 - Differential replay execution and semantic-model diff are not included.
 - Diff and regression are Python APIs; dedicated CLI commands are not included.
-- Redaction is a safety baseline, not a guarantee that an AgentCase is secret-free or PII-free.
+- Redaction is a safety baseline, not a guarantee that an AgentCase is secret free or PII free.
 - There is no dashboard, database, hosted service, or SaaS control plane.
 
 These boundaries are intentional for a focused, reviewable initial release.
 
-## Contributing and security
+## Contributing
 
-Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before proposing changes and [`SECURITY.md`](SECURITY.md) before reporting a vulnerability.
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before proposing changes. Strong issues start with a concrete failure or maintenance problem and the smallest synthetic reproduction that demonstrates it.
 
-The repository must remain private until [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md) has been verified against the final `main` commit. PyPI publication and a GitHub Release are separate explicit owner actions.
+## Maintainer
+
+ReproAgent is created and maintained by [Mahdi Navaei](https://github.com/MahdiNavaei).
+
+The repository must remain private until [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md) has been verified against the final `main` commit. PyPI publication, an official funding destination, and a GitHub Release are separate explicit maintainer actions.

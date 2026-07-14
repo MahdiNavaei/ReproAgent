@@ -1,9 +1,9 @@
-"""Deterministic, data-only mock replay for captured AgentCases.
+"""Deterministic, data-only mock replay projection for captured AgentCases.
 
-Mock replay never imports recorded application code, executes tools, or calls a model/provider.
-It validates that captured request/call events have exactly one captured terminal response/result,
-then produces a new AgentCase whose events are copied from the source artifact and whose replay
-metadata makes the substitution explicit.
+Mock replay projection never imports recorded application code, executes tools, or calls a
+model/provider. It validates captured interaction pairing, then produces a new AgentCase artifact
+whose events still describe the source execution and whose replay metadata makes the projection
+explicit.
 """
 
 from __future__ import annotations
@@ -57,10 +57,12 @@ def validate_mock_replay_source(case: AgentCase, *, allow_incomplete: bool = Fal
 
 
 def mock_replay(case: AgentCase, *, allow_incomplete: bool = False) -> AgentCase:
-    """Create a deterministic data-only replay artifact from a captured AgentCase.
+    """Create a data-only replay-provenance projection of a captured AgentCase.
 
     No recorded code is imported and no model, provider, tool, network endpoint, subprocess,
-    filesystem mutation, or other side effect is invoked. The source events are copied as data.
+    filesystem mutation, or other side effect is invoked. The source events remain evidence of the
+    same execution, so ``execution_id`` is preserved. A new ``case_id`` identifies the derived
+    artifact and replay metadata records the projection.
     """
 
     validate_mock_replay_source(case, allow_incomplete=allow_incomplete)
@@ -89,7 +91,6 @@ def mock_replay(case: AgentCase, *, allow_incomplete: bool = False) -> AgentCase
     replayed = case.model_copy(
         update={
             "case_id": uuid4(),
-            "execution_id": uuid4(),
             "created_at": datetime.now(UTC),
             "replay": replay,
         },
