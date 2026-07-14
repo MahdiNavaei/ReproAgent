@@ -2,78 +2,73 @@
 
 ## Principle
 
-Replay is an execution decision, not a property inferred from a recorded trace.
+Replay is an execution decision, not a property inferred from a recorded trace. A validated AgentCase is data, never executable code.
 
-A future CLI must never silently upgrade a mocked replay into a live replay. Missing mocks, unresolved dependencies, or unsupported events must produce an explicit incomplete, blocked, degraded, or failed result according to the future replay contract.
+Mock replay must never silently upgrade to a live provider or tool call. Missing recordings, request mismatches, unsupported events, and unconsumed interactions fail closed.
 
-## Mock Replay
+## Current mock replay execution
 
-Mock replay reuses recorded external interactions and avoids real provider or tool calls for interactions covered by the recording.
+`run_mock_replay(case, entrypoint)` is the supported local execution replay contract in the initial release.
+
+The caller explicitly supplies `entrypoint`, a local Python callable receiving `MockReplayContext`. ReproAgent never reads an executable entrypoint from AgentCase metadata, never dynamically imports recorded code, and never evaluates recorded source.
+
+The context exposes recorded external interactions as data:
+
+- `model_response(...)` matches the next recorded model request and returns its recorded output;
+- `tool_result(...)` matches the next recorded tool call and returns a data-only `RecordedToolResult`;
+- exhausted recordings do not fall back to a provider or tool;
+- mismatched requests fail with `ReplayContractError`;
+- a successful replay must consume every recorded model/tool interaction.
+
+The caller-supplied callable is ordinary local Python code and is not sandboxed by ReproAgent. It may use time, randomness, local state, files, or other dependencies on its own. The deterministic safety claim is limited to external interactions explicitly routed through `MockReplayContext`.
 
 ### Intended guarantees
 
-- offline reproduction where all required interactions are captured and supported,
-- stable use of recorded responses,
-- no intentional live side effects.
+- recorded model/tool substitutions are used in captured order;
+- no model provider is called by the replay context;
+- no recorded tool is executed by the replay context;
+- no AgentCase-provided code path is imported or executed;
+- no live fallback exists;
+- interaction mismatch and missing recordings are explicit failures.
 
 ### Non-guarantees
 
-- deterministic behavior if the agent itself uses time, randomness, concurrency, local mutable state, or uncaptured dependencies,
-- completeness when the original capture is partial,
+- deterministic behavior for caller code that uses uncaptured time, randomness, concurrency, mutable state, filesystem state, or other dependencies;
+- sandboxing of caller-supplied local Python code;
+- completeness when an incomplete source is explicitly allowed;
 - equivalence to current external services.
 
-A mock replay with missing required external interactions must not automatically call the live dependency.
+## Replay artifact projection
 
-## Live Replay
+`mock_replay(case)` and `reproagent replay ... --mock` perform a separate data-only operation. They validate the source and produce a new AgentCase containing replay provenance while retaining recorded events. They do not execute an agent.
 
-Live replay executes against current providers or tools.
+This surface is useful for provenance and artifact workflows, but documentation must not describe it as re-executing application code.
 
-### Intended use
+## Incomplete captures
 
-- reproduce behavior against current dependencies,
-- verify whether a failure still occurs,
-- inspect environmental or provider drift.
+Complete source capture is required by default. `allow_incomplete=True` is an explicit override for investigation; it does not authorize live fallback and does not change the source completeness truth.
 
-### Non-guarantees
+## Live replay
 
-- deterministic equivalence to the original run,
-- stable model output,
-- unchanged external state,
-- safe side effects by default.
+Live replay against current providers or tools is not implemented. Any future live mode must be explicitly selected and separated from mock code paths. Side-effecting actions require explicit intent beyond opening, inspecting, validating, or mock-replaying a case.
 
-Live mode must be explicitly selected. Side-effecting actions require explicit user intent beyond merely opening or validating a case.
+## Differential replay
 
-## Differential Replay
-
-Differential replay executes the same logical case with one or more declared substitutions, such as a changed model, provider, prompt, configuration, or implementation.
-
-The replay result must record those substitutions. Comparison must not present changed conditions as an identical replay.
-
-Differential replay can be mock-backed, live, or mixed in future versions, but the execution plan must state which dependencies are live and what deterministic guarantees remain.
+Differential replay execution is not implemented. Future differential replay may declare model, provider, prompt, configuration, or implementation substitutions, but changed conditions must be recorded and must never be presented as an identical replay.
 
 ## Side-effect classes
 
-Examples of side-effecting tools include:
-
-- sending email or messages,
-- deleting or modifying data,
-- making purchases or financial transactions,
-- writing to databases,
-- calling mutating external APIs,
-- triggering workflows, deployments, or jobs.
-
-A future replay implementation should classify tool interactions at the adapter or replay-plan boundary. Unknown tools must not be assumed safe.
+Potentially side-effecting tools include sending messages, deleting or modifying data, making purchases, writing databases, calling mutating APIs, and triggering workflows or deployments. Unknown tools must never be assumed safe for a future live mode.
 
 ## Command boundary requirements
 
-The future command surface must preserve these rules:
-
-1. `mock` is fail-closed with respect to missing live interactions.
-2. `live` requires explicit selection.
-3. destructive or potentially destructive live actions require an additional explicit approval mechanism.
-4. replay metadata records mode, source case, substitutions, changed dependencies, determinism guarantees, and unresolved external dependencies.
-5. validation and inspection never execute recorded tools.
+1. `mock` is fail closed with respect to missing live interactions.
+2. `live` requires explicit future implementation and explicit selection.
+3. destructive live actions require an additional explicit approval mechanism.
+4. replay metadata records mode, source case, substitutions, determinism guarantees, and unresolved dependencies.
+5. validation and inspection never execute recorded tools or code.
+6. AgentCase metadata is never an executable entrypoint source.
 
 ## Current implementation boundary
 
-This milestone stores replay metadata but performs no replay. The absence of an execution engine is intentional. The safety contract is established before implementation so future convenience behavior cannot redefine the boundary silently.
+The initial release implements explicit caller-supplied local mock replay execution and data-only replay artifact projection. It intentionally does not implement live replay, side-effecting tool replay, automatic application import, or a sandbox for arbitrary caller code.
