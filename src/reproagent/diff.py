@@ -176,7 +176,9 @@ def _compare_sequence(
         )
 
 
-def _normalized_equal(expected: JsonValue, actual: JsonValue, *, float_tolerance: float) -> bool:
+def _normalized_equal(
+    expected: JsonValue, actual: JsonValue, *, float_tolerance: float
+) -> bool:
     if isinstance(expected, str) and isinstance(actual, str):
         return _normalize_string(expected) == _normalize_string(actual)
     if isinstance(expected, float) and isinstance(actual, float):
