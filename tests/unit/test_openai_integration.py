@@ -1,9 +1,9 @@
 from types import SimpleNamespace
 
 import pytest
-
 from reproagent.capture import capture
 from reproagent.domain import EventType
+
 from reproagent.integrations.openai import capture_openai
 
 
@@ -96,9 +96,11 @@ def test_provider_exception_is_re_raised_unchanged_and_captured() -> None:
         completions=FakeResource(),
     )
 
-    with pytest.raises(RuntimeError, match="synthetic provider failure") as raised:
-        with capture() as session:
-            capture_openai(client).responses.create(model="gpt-test", input="hello")
+    with (
+        pytest.raises(RuntimeError, match="synthetic provider failure") as raised,
+        capture() as session,
+    ):
+        capture_openai(client).responses.create(model="gpt-test", input="hello")
 
     assert raised.value is provider_error
     assert session.case is not None
