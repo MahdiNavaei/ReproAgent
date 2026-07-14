@@ -1,0 +1,68 @@
+name: Bug report
+description: Report a reproducible ReproAgent defect
+title: "bug: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping harden ReproAgent. Use synthetic data and remove secrets before sharing any AgentCase or trace content.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and why it is incorrect.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Provide the smallest code or commands that reproduce the issue. Do not include real credentials or customer data.
+      render: python
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ReproAgent version or commit
+      placeholder: "0.1.1 or commit SHA"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.11.9"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - AgentCase / loading
+        - Capture
+        - OpenAI integration
+        - Mock replay execution
+        - Replay artifact projection
+        - Diff
+        - Regression / pytest
+        - CLI
+        - Documentation / packaging
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Sensitive data check
+      options:
+        - label: I reviewed the report and attachments for real secrets, private prompts, customer data, and production traces.
+          required: true
