@@ -20,4 +20,8 @@ __all__ = [
     "CaptureStatus",
     "Event",
     "EventType",
-    "Execution
+    "ExecutionOutcome",
+    "RedactionMetadata",
+    "RedactionStatus",
+    "__version__",
+]
