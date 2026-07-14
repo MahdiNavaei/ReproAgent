@@ -134,9 +134,13 @@ def _compare_mapping(
     actual_keys = set(actual).difference(ignored_keys)
 
     for key in sorted(expected_keys - actual_keys):
-        differences.append(Difference(_key_path(path, key), "missing_key", expected[key], None))
+        differences.append(
+            Difference(_key_path(path, key), "missing_key", expected[key], None)
+        )
     for key in sorted(actual_keys - expected_keys):
-        differences.append(Difference(_key_path(path, key), "unexpected_key", None, actual[key]))
+        differences.append(
+            Difference(_key_path(path, key), "unexpected_key", None, actual[key])
+        )
     for key in sorted(expected_keys & actual_keys):
         _compare_value(
             expected[key],
@@ -164,7 +168,9 @@ def _compare_sequence(
             Difference(path, "length_mismatch", len(expected), len(actual))
         )
 
-    for index, (expected_item, actual_item) in enumerate(zip(expected, actual, strict=False)):
+    for index, (expected_item, actual_item) in enumerate(
+        zip(expected, actual, strict=False)
+    ):
         _compare_value(
             expected_item,
             actual_item,
@@ -182,7 +188,9 @@ def _normalized_equal(
     if isinstance(expected, str) and isinstance(actual, str):
         return _normalize_string(expected) == _normalize_string(actual)
     if isinstance(expected, float) and isinstance(actual, float):
-        return isclose(expected, actual, rel_tol=float_tolerance, abs_tol=float_tolerance)
+        return isclose(
+            expected, actual, rel_tol=float_tolerance, abs_tol=float_tolerance
+        )
     return expected == actual
 
 
@@ -199,7 +207,9 @@ def _is_mapping(value: Any) -> bool:
 
 
 def _is_sequence(value: Any) -> bool:
-    return isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))
+    return isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray)
+    )
 
 
 __all__ = ["DiffMode", "DiffResult", "Difference", "JsonValue", "compare"]
