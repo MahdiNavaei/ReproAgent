@@ -13,12 +13,19 @@ from reproagent.domain import (
     RedactionMetadata,
     RedactionStatus,
 )
+from reproagent.regression import (
+    DEFAULT_VOLATILE_KEYS,
+    RegressionResult,
+    assert_agentcase_regression,
+    compare_agentcases,
+)
 
 __all__ = [
     "AgentCase",
     "AgentCaseMetadata",
     "CaptureCompleteness",
     "CaptureStatus",
+    "DEFAULT_VOLATILE_KEYS",
     "DiffMode",
     "DiffResult",
     "Difference",
@@ -27,6 +34,9 @@ __all__ = [
     "ExecutionOutcome",
     "RedactionMetadata",
     "RedactionStatus",
+    "RegressionResult",
     "__version__",
+    "assert_agentcase_regression",
     "compare",
+    "compare_agentcases",
 ]
