@@ -22,14 +22,22 @@ def _complete_case() -> AgentCase:
                 event_type=EventType.MODEL_REQUEST,
                 sequence=1,
                 parent_event_id=start_id,
-                payload={"provider": "offline", "model": "fixture", "input": {"prompt": "hello"}},
+                payload={
+                    "provider": "offline",
+                    "model": "fixture",
+                    "input": {"prompt": "hello"},
+                },
             ),
             Event(
                 event_id=response_id,
                 event_type=EventType.MODEL_RESPONSE,
                 sequence=2,
                 parent_event_id=request_id,
-                payload={"provider": "offline", "model": "fixture", "output": {"text": "hi"}},
+                payload={
+                    "provider": "offline",
+                    "model": "fixture",
+                    "output": {"text": "hi"},
+                },
             ),
             Event(
                 event_id=call_id,
@@ -43,7 +51,12 @@ def _complete_case() -> AgentCase:
                 event_type=EventType.TOOL_RESULT,
                 sequence=4,
                 parent_event_id=call_id,
-                payload={"name": "lookup", "call_id": "call-1", "status": "success", "result": {"ok": True}},
+                payload={
+                    "name": "lookup",
+                    "call_id": "call-1",
+                    "status": "success",
+                    "result": {"ok": True},
+                },
             ),
             Event(
                 event_type=EventType.EXECUTION_END,
@@ -53,6 +66,35 @@ def _complete_case() -> AgentCase:
             ),
         ),
         outcome=ExecutionOutcome.SUCCESS,
+        completeness=CaptureCompleteness.COMPLETE,
+    )
+
+
+def _case_with_unanswered_model_request() -> AgentCase:
+    start_id = uuid4()
+    request_id = uuid4()
+    return AgentCase(
+        events=(
+            Event(event_id=start_id, event_type=EventType.EXECUTION_START, sequence=0),
+            Event(
+                event_id=request_id,
+                event_type=EventType.MODEL_REQUEST,
+                sequence=1,
+                parent_event_id=start_id,
+                payload={
+                    "provider": "offline",
+                    "model": "fixture",
+                    "input": {"prompt": "hello"},
+                },
+            ),
+            Event(
+                event_type=EventType.EXECUTION_END,
+                sequence=2,
+                parent_event_id=start_id,
+                payload={"outcome": "failure"},
+            ),
+        ),
+        outcome=ExecutionOutcome.FAILURE,
         completeness=CaptureCompleteness.COMPLETE,
     )
 
@@ -87,16 +129,8 @@ def test_mock_replay_rejects_incomplete_capture_by_default() -> None:
 
 
 def test_mock_replay_rejects_missing_model_response() -> None:
-    source = _complete_case()
-    source = source.model_copy(update={"events": tuple(event for event in source.events if event.event_type != EventType.MODEL_RESPONSE)})
-    source = source.model_copy(
-        update={
-            "events": tuple(event.model_copy(update={"sequence": index}) for index, event in enumerate(source.events))
-        }
-    )
-
     with pytest.raises(ReplayContractError, match="exactly one model.response"):
-        validate_mock_replay_source(source)
+        validate_mock_replay_source(_case_with_unanswered_model_request())
 
 
 def test_mock_replay_rejects_already_replayed_case() -> None:
