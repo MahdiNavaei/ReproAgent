@@ -30,7 +30,13 @@ jobs:
           name: ruff-diagnostics
           path: /tmp/ruff.log
       - name: Ruff format
-        run: ruff format --check .
+        run: set -o pipefail; ruff format --check --diff . 2>&1 | tee /tmp/format.log
+      - name: Upload Ruff format diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruff-format-diagnostics
+          path: /tmp/format.log
       - name: Mypy
         run: mypy src/reproagent
       - name: Build package
