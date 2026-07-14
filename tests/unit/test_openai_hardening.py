@@ -88,9 +88,12 @@ def test_unsupported_response_object_is_omitted_without_repr() -> None:
     assert len(resource.calls) == 1
     assert session.case is not None
     assert session.case.completeness == CaptureCompleteness.DEGRADED
-    assert [
-        event.event_type for event in session.case.events if event.event_type == EventType.MODEL_RESPONSE
-    ] == []
+    responses = [
+        event
+        for event in session.case.events
+        if event.event_type == EventType.MODEL_RESPONSE
+    ]
+    assert responses == []
     assert marker not in session.case.model_dump_json()
 
 
@@ -141,12 +144,11 @@ def test_provider_exception_identity_survives_capture_and_secret_is_redacted(
     error = RuntimeError(f"provider failed with {secret}")
     resource = FakeResource(error=error)
 
-    with pytest.raises(RuntimeError) as raised:
-        with capture(output=output):
-            capture_openai(FakeClient(resource)).responses.create(
-                model="gpt-test",
-                input="hello",
-            )
+    with pytest.raises(RuntimeError) as raised, capture(output=output):
+        capture_openai(FakeClient(resource)).responses.create(
+            model="gpt-test",
+            input="hello",
+        )
 
     assert raised.value is error
     assert len(resource.calls) == 1
