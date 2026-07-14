@@ -3,6 +3,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
+
 from reproagent.domain import (
     AgentCase,
     CaptureCompleteness,
@@ -10,7 +11,6 @@ from reproagent.domain import (
     EventType,
     ExecutionOutcome,
 )
-
 from reproagent.replay import (
     ReplayContractError,
     mock_replay,
