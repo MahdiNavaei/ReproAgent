@@ -20,6 +20,7 @@ from reproagent.domain import (
     ReplayMode,
     ReplaySubstitution,
 )
+
 from reproagent.replay.errors import ReplayContractError, ReplaySafetyError
 
 
@@ -73,15 +74,12 @@ def mock_replay(case: AgentCase, *, allow_incomplete: bool = False) -> AgentCase
             ReplaySubstitution(
                 target="model.provider_calls",
                 description=(
-                    "captured model responses reused as immutable data; "
-                    "no provider call executed"
+                    "captured model responses reused as immutable data; no provider call executed"
                 ),
             ),
             ReplaySubstitution(
                 target="tool.side_effects",
-                description=(
-                    "captured tool results reused as immutable data; no tool executed"
-                ),
+                description=("captured tool results reused as immutable data; no tool executed"),
             ),
         ),
         determinism_guarantee=DeterminismGuarantee.DETERMINISTIC,
