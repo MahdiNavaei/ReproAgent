@@ -6,7 +6,8 @@ ReproAgent is early-stage and the public contribution workflow is intentionally 
 
 - Read `docs/architecture/PROJECT_CHARTER.md` and `docs/architecture/MVP_SCOPE.md`.
 - Keep changes focused on reproducible agent execution failures and regression prevention.
-- Preserve the initial safety boundary: mock replay is data-only and must not become live side-effecting replay by accident.
+- Preserve the replay safety boundary: mock interaction substitution must remain fail-closed and must never fall back to live providers or recorded-tool execution.
+- Never import or execute application code from AgentCase data. Explicit local replay code must be supplied directly by the caller.
 - Do not add hosted infrastructure, hidden network calls, or provider-specific assumptions to the core domain model.
 - Never commit real secrets, customer data, production prompts, or private execution traces.
 - Do not let instrumentation failures replace original application or provider exceptions.
