@@ -8,7 +8,6 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import JsonValue
-
 from reproagent.capture import CaptureSession, get_current_session
 
 
