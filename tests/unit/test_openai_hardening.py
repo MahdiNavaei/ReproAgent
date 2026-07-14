@@ -89,9 +89,7 @@ def test_unsupported_response_object_is_omitted_without_repr() -> None:
     assert session.case is not None
     assert session.case.completeness == CaptureCompleteness.DEGRADED
     responses = [
-        event
-        for event in session.case.events
-        if event.event_type == EventType.MODEL_RESPONSE
+        event for event in session.case.events if event.event_type == EventType.MODEL_RESPONSE
     ]
     assert responses == []
     assert marker not in session.case.model_dump_json()
