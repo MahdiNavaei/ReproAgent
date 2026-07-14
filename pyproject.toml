@@ -35,6 +35,9 @@ dev = [
   "pytest>=8.3",
   "ruff>=0.11",
 ]
+openai = [
+  "openai>=2,<3",
+]
 pytest = [
   "pytest>=8.3",
 ]
