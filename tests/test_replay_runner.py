@@ -106,6 +106,17 @@ def test_run_mock_replay_fails_closed_on_request_mismatch() -> None:
         run_mock_replay(_case(), changed_agent)
 
 
+def test_run_mock_replay_enforces_global_model_tool_order() -> None:
+    def out_of_order_agent(replay: MockReplayContext) -> None:
+        replay.tool_result(name="lookup", arguments={"id": 1})
+
+    with pytest.raises(
+        ReplayContractError,
+        match="next recorded interaction is model, requested tool",
+    ):
+        run_mock_replay(_case(), out_of_order_agent)
+
+
 def test_run_mock_replay_fails_when_recorded_interactions_are_unconsumed() -> None:
     with pytest.raises(ReplayContractError, match="unconsumed recorded interactions"):
         run_mock_replay(_case(), lambda replay: "done")
@@ -118,13 +129,14 @@ def test_run_mock_replay_has_no_live_fallback_after_recording_is_exhausted() -> 
             model="fixture",
             input={"prompt": "hello"},
         )
+        replay.tool_result(name="lookup", arguments={"id": 1})
         replay.model_response(
             provider="offline",
             model="fixture",
             input={"prompt": "hello"},
         )
 
-    with pytest.raises(ReplayContractError, match="no recorded model interaction remaining"):
+    with pytest.raises(ReplayContractError, match="no recorded interaction remaining"):
         run_mock_replay(_case(), too_many_calls)
 
 
