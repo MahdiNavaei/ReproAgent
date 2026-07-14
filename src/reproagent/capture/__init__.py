@@ -10,7 +10,8 @@ from reproagent.capture.errors import (
     NestedCaptureSessionError,
 )
 from reproagent.capture.payloads import ToolResultStatus
-from reproagent.capture.session import CaptureSession, CaptureSessionState, capture
+from reproagent.capture.safe_session import CaptureSession, capture
+from reproagent.capture.session import CaptureSessionState
 from reproagent.capture.tools import capture_tool
 
 __all__ = [
