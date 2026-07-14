@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+
 from reproagent.agentcase import load_agentcase
 from reproagent.diff import DiffMode
 from reproagent.domain import AgentCase, ExecutionOutcome
