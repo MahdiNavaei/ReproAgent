@@ -1,13 +1,15 @@
 # AgentCase Specification v0
 
-**Status:** Draft foundation contract
-**Format name:** `agentcase`
-**Format version:** `0.1`
+**Status:** Initial v0 wire contract  
+**Format name:** `agentcase`  
+**Format version:** `0.1`  
 **Default file extension:** `.agentcase`
 
 ## 1. Purpose
 
-AgentCase is a portable, data-only record of one agent execution or one replay-derived execution. It is designed for inspection, replay planning, comparison, and regression testing without requiring an internal database.
+AgentCase is a portable, data-only artifact centered on one agent execution. A case may directly record that execution or be a derived provenance artifact that still describes the same underlying execution.
+
+AgentCase is designed for inspection, replay planning and provenance, comparison, and regression testing without requiring an internal database.
 
 This specification defines the initial v0 wire contract independently from the Python implementation.
 
@@ -17,26 +19,26 @@ AgentCase v0 is one UTF-8 encoded JSON object stored directly in a `.agentcase` 
 
 A conforming writer uses canonical serialization:
 
-- JSON object root,
-- UTF-8 encoding,
-- lexicographically sorted object keys,
-- compact separators,
-- no NaN or Infinity values,
-- JSON strings for UUIDs and enum values,
-- timezone-aware RFC 3339 / ISO 8601 datetime strings,
+- JSON object root;
+- UTF-8 encoding;
+- lexicographically sorted object keys;
+- compact separators;
+- no NaN or Infinity values;
+- JSON strings for UUIDs and enum values;
+- timezone-aware RFC 3339 / ISO 8601 datetime strings;
 - one trailing newline.
 
 A reader may accept non-canonical whitespace but must validate semantic structure before treating the file as an AgentCase.
 
 ### Rationale
 
-Plain JSON is chosen for v0 because the required MVP data is structured text and numbers, portability is more important than compression, and inspection should not require a container library. ZIP or JSON-plus-attachments would add complexity before the MVP has a concrete binary-attachment requirement.
+Plain JSON is chosen for v0 because the required initial-release data is structured text and numbers, portability is more important than compression, and inspection should not require a container library.
 
 ### Limitations
 
-- large binary payloads are inefficient,
-- repeated content is not compressed,
-- one file must fit within implementation-specific safety limits,
+- large binary payloads are inefficient;
+- repeated content is not compressed;
+- one file must fit within implementation-specific safety limits;
 - raw attachments are not supported in v0.
 
 A future independently versioned format may introduce a container with a manifest and content-addressed attachments. Readers must not reinterpret such a format as AgentCase `0.1`.
@@ -49,34 +51,42 @@ Required root fields:
 |---|---|---|
 | `format_name` | string | Must equal `agentcase`. |
 | `format_version` | string | Must equal a version supported by the reader; this spec defines `0.1`. |
-| `case_id` | UUID string | Stable identity of this portable case. |
-| `execution_id` | UUID string | Identity of the represented execution. |
+| `case_id` | UUID string | Identity of this portable artifact. |
+| `execution_id` | UUID string | Identity of the underlying represented application execution. |
 | `created_at` | timezone-aware datetime string | Artifact creation timestamp. |
 | `metadata` | object | Execution metadata. |
 | `events` | array of event objects | Ordered execution events. |
 | `outcome` | enum string | Explicit execution outcome. |
 | `completeness` | enum string | Explicit capture completeness. |
 | `redaction` | object | Redaction metadata. |
-| `replay` | object or null | Replay provenance when applicable. |
+| `replay` | object or null | Replay/projection provenance when applicable. |
 | `extensions` | object | Namespaced non-core data. |
 
 Unknown root fields are rejected by AgentCase v0 readers. Forward-compatible experimental data belongs under `extensions` and is preserved as unverified data.
 
-## 4. Identity
+## 4. Artifact and execution identity
 
-`case_id` and `execution_id` are UUIDs and serve different purposes. A case may be copied without changing `case_id`; a new execution, including a replay execution, receives a distinct `execution_id`. Replay provenance identifies the source case separately.
+`case_id` and `execution_id` serve different purposes.
+
+`case_id` identifies one AgentCase artifact. A derived artifact receives a new `case_id`.
+
+`execution_id` identifies the underlying application execution described by the events. A data-only replay-provenance projection that copies the same recorded events preserves `execution_id` because no new application execution occurred.
+
+A future replay mode that records a genuinely new execution must use a distinct `execution_id` for that new execution and record source provenance separately.
+
+Copying bytes or relocating the exact same artifact does not by itself require a new `case_id`.
 
 ## 5. Execution metadata
 
 `metadata` contains:
 
-- `reproagent_version`: package version of the writer,
-- `runtime`: Python implementation and Python version,
-- `platform`: operating system, release, and machine architecture,
-- optional `provider`: provider identifier and optional provider version,
-- optional `model`: model identifier and JSON-safe configuration,
-- optional `integration`: adapter/integration identifier and optional version,
-- `user_metadata`: user-defined JSON-safe metadata,
+- `reproagent_version`: package version of the writer;
+- `runtime`: Python implementation and Python version;
+- `platform`: operating system, release, and machine architecture;
+- optional `provider`: provider identifier and optional provider version;
+- optional `model`: model identifier and JSON-safe configuration;
+- optional `integration`: adapter/integration identifier and optional version;
+- `user_metadata`: user-defined JSON-safe metadata;
 - `extensions`: namespaced non-core data.
 
 The provider, model, and integration objects are descriptive metadata. Their absence must be represented as `null`, not guessed.
@@ -100,7 +110,7 @@ Events form one deterministic ordered sequence. Each event contains:
 ### 6.1 Ordering rules
 
 - Event IDs are unique within one case.
-- Sequence values are contiguous, unique, zero-based, and stored in sequence order.
+- Sequence values are contiguous, unique, zero based, and stored in sequence order.
 - A parent reference must identify an event in the same case.
 - A parent event must appear before its child.
 
@@ -122,7 +132,7 @@ Timestamps do not define canonical ordering because clocks can collide or move. 
 | `retry` | Explicit retry attempt or retry scheduling event. |
 | `custom` | Adapter-specific event that cannot yet be normalized without inventing semantics. |
 
-The taxonomy separates execution boundaries, communication, model interactions, tool lifecycle, and failures while keeping payloads provider-neutral. Tool failure is represented by `tool.result` payload state and may also be accompanied by an `exception` when an exception was actually observed. This avoids inventing duplicate event classes for every provider-specific failure shape.
+Tool failure is represented by `tool.result` payload state and may also be accompanied by an `exception` when an exception was actually observed.
 
 `custom` is an escape hatch, not permission to encode a framework's entire trace model as opaque core semantics. Adapters should normalize common behavior first and identify custom payloads through namespaced extension data.
 
@@ -130,10 +140,10 @@ The taxonomy separates execution boundaries, communication, model interactions, 
 
 Allowed event capture states:
 
-- `captured`
-- `partial`
-- `failed`
-- `unsupported`
+- `captured`;
+- `partial`;
+- `failed`;
+- `unsupported`.
 
 An event marked `partial`, `failed`, or `unsupported` remains visible evidence that capture was incomplete.
 
@@ -141,12 +151,12 @@ An event marked `partial`, `failed`, or `unsupported` remains visible evidence t
 
 Allowed execution outcomes:
 
-- `success`
-- `failure`
-- `partial`
-- `cancelled`
-- `timeout`
-- `unknown`
+- `success`;
+- `failure`;
+- `partial`;
+- `cancelled`;
+- `timeout`;
+- `unknown`.
 
 A boolean success field is insufficient and is not part of the core contract.
 
@@ -154,47 +164,51 @@ A boolean success field is insufficient and is not part of the core contract.
 
 Allowed case-level completeness values:
 
-- `complete`: all data required by the active capture contract was captured,
-- `partial`: some expected data is missing,
-- `degraded`: capture continued with reduced fidelity,
-- `interrupted`: capture ended before normal completion,
+- `complete`: all data required by the active capture contract was captured;
+- `partial`: some expected data is missing;
+- `degraded`: capture continued with reduced fidelity;
+- `interrupted`: capture ended before normal completion;
 - `unsupported`: the integration could not represent the execution reliably.
 
-Completeness is independent from outcome. A failed execution can be completely captured; a successful execution can have a partial capture.
+Completeness is independent from outcome. A failed execution can be completely captured; a successful execution can have a partial or degraded capture.
 
 ## 9. Replay metadata
 
-When an AgentCase represents a replay-derived execution, `replay` may contain:
+When an AgentCase carries replay or replay-projection provenance, `replay` may contain:
 
-- `mode`: `mock`, `live`, or `differential`,
-- `source_case_id`,
-- `replayed_at`,
-- declared `substitutions`,
-- `changed_provider`,
-- `changed_model`,
-- `changed_configuration`,
-- `determinism_guarantee`: `deterministic`, `best_effort`, `none`, or `unknown`,
-- `unresolved_external_dependencies`,
-- `live_side_effects_approved`,
+- `mode`: `mock`, `live`, or `differential`;
+- `source_case_id`;
+- `replayed_at`;
+- declared `substitutions`;
+- `changed_provider`;
+- `changed_model`;
+- `changed_configuration`;
+- `determinism_guarantee`: `deterministic`, `best_effort`, `none`, or `unknown`;
+- `unresolved_external_dependencies`;
+- `live_side_effects_approved`;
 - `extensions`.
 
-A mock replay cannot declare live side effects approved. Missing mock data must never silently cause a live call.
+A mock artifact cannot declare live side effects approved. Missing mock data must never silently cause a live call.
+
+The current data-only `mock_replay(case)` projection preserves the source `execution_id`, creates a new `case_id`, and records source/substitution provenance. It does not claim that application code executed.
+
+The current `run_mock_replay` execution API returns a `ReplayRunResult`; it does not fabricate a new AgentCase for the caller-supplied local execution.
 
 ## 10. Security and redaction metadata
 
 The root `redaction` object contains:
 
-- `status`: `none`, `redacted`, `partial`, or `unknown`,
-- `records`: redaction record array,
-- `warnings`: warning strings,
-- `potentially_sensitive_unredacted`: boolean,
+- `status`: `none`, `redacted`, `partial`, or `unknown`;
+- `records`: redaction record array;
+- `warnings`: warning strings;
+- `potentially_sensitive_unredacted`: boolean;
 - `extensions`.
 
 Each redaction record contains:
 
-- `field_path`: path identifying the redacted location,
-- `rule_id`: stable redaction rule identifier,
-- `replacement_marker`: irreversible replacement marker,
+- `field_path`: path identifying the redacted location;
+- `rule_id`: stable redaction rule identifier;
+- `replacement_marker`: irreversible replacement marker;
 - `irreversible`: must be `true` in v0.
 
 Original secret values must never be stored in redaction metadata. A redaction status of `none` cannot include records; `redacted` requires at least one record.
@@ -227,7 +241,7 @@ Every major core object includes an `extensions` map. Extension keys should use 
 
 Core readers preserve extension values as JSON data but do not treat unknown extensions as verified core semantics. Unknown top-level fields are rejected to prevent accidental reinterpretation.
 
-The Prompt 02 Capture Engine uses the project-owned root extension namespace `org.reproagent.capture/v1` for capture diagnostics such as dropped-event counts and safe degradation reasons. This extension does not change AgentCase `0.1` core semantics.
+The current Capture Engine uses the project-owned root extension namespace `org.reproagent.capture/v1` for capture diagnostics such as dropped-event counts and safe degradation reasons. This extension does not change AgentCase `0.1` core semantics.
 
 For multi-provider or multi-model executions, event-level `model.request` and `model.response` payloads are the source of truth for each interaction. Optional root provider/model metadata may only represent an explicitly declared primary value and must not be repeatedly overwritten to imply that the final interaction was the only one used.
 
@@ -251,14 +265,14 @@ A migration must be explicit, testable, and preserve the source artifact unless 
 
 A conforming AgentCase v0 reader validates at least:
 
-- supported format name and version,
-- valid UUID identifiers,
-- timezone-aware timestamps,
-- unique event IDs,
-- contiguous deterministic sequence numbers beginning at zero,
-- valid backward-only parent references,
-- valid enum values,
-- strict known core fields,
+- supported format name and version;
+- valid UUID identifiers;
+- timezone-aware timestamps;
+- unique event IDs;
+- contiguous deterministic sequence numbers beginning at zero;
+- valid backward-only parent references;
+- valid enum values;
+- strict known core fields;
 - JSON-safe payload values.
 
 ## 14. Security boundary
@@ -285,7 +299,7 @@ Validating or inspecting a case is never authorization to replay side effects.
     "model": null,
     "platform": {"machine": "x86_64", "release": "synthetic", "system": "Linux"},
     "provider": null,
-    "reproagent_version": "0.1.0",
+    "reproagent_version": "0.1.1",
     "runtime": {"implementation": "CPython", "python_version": "3.11.0"},
     "user_metadata": {}
   },
