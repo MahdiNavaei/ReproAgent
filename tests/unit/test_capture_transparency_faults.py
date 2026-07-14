@@ -16,6 +16,7 @@ def test_unexpected_exception_capture_failure_cannot_mask_original(
     original = PrimaryApplicationError("primary")
 
     with pytest.raises(PrimaryApplicationError) as raised, session:
+
         def fail_capture(*args: object, **kwargs: object) -> None:
             raise KeyboardInterrupt("capture fault")
 
@@ -33,6 +34,7 @@ def test_unexpected_outcome_capture_failure_cannot_mask_original(
     original = PrimaryApplicationError("primary")
 
     with pytest.raises(PrimaryApplicationError) as raised, session:
+
         def fail_outcome(*args: object, **kwargs: object) -> None:
             raise SystemExit("capture outcome fault")
 
