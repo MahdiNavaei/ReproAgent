@@ -293,7 +293,7 @@ The most valuable support today is to try it on difficult agent failures, report
 
 If ReproAgent becomes useful to you or your team, sponsorship can help sustain SDK compatibility, security review, AgentCase compatibility, regression fixtures, documentation, and carefully scoped integrations.
 
-Only funding links displayed by GitHub for this repository or committed in `.github/FUNDING.yml` should be treated as official funding destinations.
+The repository's official GitHub funding configuration is committed in [`.github/FUNDING.yml`](.github/FUNDING.yml). Only funding destinations displayed by GitHub from that configuration should be treated as official ReproAgent funding destinations.
 
 See [`SUPPORT.md`](SUPPORT.md) for support and sustainability guidance.
 
@@ -345,4 +345,4 @@ Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before proposing changes. Strong issue
 
 ReproAgent is created and maintained by [Mahdi Navaei](https://github.com/MahdiNavaei).
 
-The repository must remain private until [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md) has been verified against the final `main` commit. PyPI publication, an official funding destination, and a GitHub Release are separate explicit maintainer actions.
+The initial public release was gated by [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md). PyPI publication and a GitHub Release remain separate explicit maintainer actions.
