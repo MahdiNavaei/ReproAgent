@@ -1,6 +1,6 @@
 # Initial public release readiness
 
-This checklist is the final gate before changing repository visibility from private to public.
+This document defined the final gate used before ReproAgent's initial repository visibility change from private to public. The repository is now public; retain this file as the launch-audit baseline for the `0.1.x` line and re-apply its technical gates to future release candidates where relevant.
 
 It is deliberately conservative. Passing CI configuration is not enough: the tested source must equal the committed release source, product and documentation contracts must agree, public-facing project metadata must be truthful, and CI evidence must be reported exactly as observed.
 
@@ -26,7 +26,7 @@ Verify that:
 - `run_mock_replay` executes only an explicitly caller-supplied local callable;
 - replay never imports or executes an entrypoint from AgentCase data;
 - mock replay interaction substitution performs no provider calls, recorded-tool execution, or live fallback;
-- missing, mismatched, extra, or unconsumed interactions fail closed;
+- missing, mismatched, extra, out-of-order, or unconsumed interactions fail closed;
 - exact, structural, and normalized diff modes remain deterministic;
 - AgentCase regression default volatility normalization is schema-location aware and does not hide payload fields named `timestamp`, `event_id`, or `replay`;
 - the pytest fixture is auto-discovered when the package is installed.
@@ -58,9 +58,9 @@ Verify that:
 - capture is not authorization for replay side effects;
 - no hidden telemetry or extra provider calls are introduced by ReproAgent;
 - no live side-effecting replay is enabled;
-- `SECURITY.md` reporting language remains valid after the repository becomes public and does not describe the project as permanently private.
+- `SECURITY.md` reporting language remains valid for a public repository.
 
-Before publication, use repository security controls available to the owner and manually inspect final diff/history for obvious credentials or private data. Connector/API visibility limitations must be stated rather than treated as evidence that a security control passed.
+Before a release, use repository security controls available to the owner and manually inspect the final diff/history for obvious credentials or private data. Connector/API visibility limitations must be stated rather than treated as evidence that a security control passed.
 
 ## Packaging and project metadata
 
@@ -111,12 +111,12 @@ Verify that:
 - support guidance explains how sanitized failure reports and compatibility work help the project;
 - sponsorship is described as support for maintenance, SDK compatibility, security review, AgentCase compatibility, regression fixtures, and carefully scoped integrations;
 - sponsorship is not described as pay-to-merge or permission to bypass safety and compatibility contracts;
-- `.github/FUNDING.yml` is added only after the maintainer has verified an active official funding destination;
+- `.github/FUNDING.yml` references only an official maintainer-approved funding destination;
 - only GitHub-displayed or repository-committed funding links are described as official.
 
 ## CI and committed-source verification
 
-For the release-candidate PR, observe a successful GitHub Actions run containing:
+For a release-candidate PR, observe a successful GitHub Actions run containing:
 
 - Ruff lint;
 - Ruff format check;
@@ -135,17 +135,19 @@ A successful PR merge and tested-source ancestry are not permission to falsify a
 
 ## Repository state
 
-Before publication:
+For the initial publication audit, verify that:
 
-- final release candidate is on `main`;
+- the final release candidate is on `main`;
 - no release milestone PR remains open;
 - successful release-candidate PR CI is observed;
 - tested PR source equals the source merged to `main`;
 - final-main push CI evidence is either observed successful or explicitly still unobserved because of a stated tooling limitation;
-- repository visibility remains private during this audit;
-- no GitHub Release has been created;
-- no package has been published to PyPI;
-- no billing or paid external service is required for the test suite.
+- repository visibility remained private while the pre-publication audit was still in progress;
+- no GitHub Release was created as part of the audit;
+- no package was published to PyPI as part of the audit;
+- no billing or paid external service was required for the test suite.
+
+After the owner changes visibility, verify that the repository is public, the default branch remains `main`, README and license render from the intended branch, funding configuration is committed, and no accidental release PR remains open.
 
 ## Known intentional limitations
 
@@ -165,18 +167,19 @@ The initial release does not claim:
 
 These are not release blockers unless README, package metadata, or architecture documents claim they exist.
 
-## Owner-only publication steps
+## Owner actions outside repository automation
 
-Only after every gate above is verified against final `main` and any unobserved CI/security evidence is resolved by the owner:
+Repository automation must not silently perform account, billing, credential, or package-registry actions that require separate owner intent.
 
-1. Review repository visibility and collaborator settings.
-2. Review GitHub security settings and secret-scanning results available to the repository owner.
-3. Confirm the final push-triggered `main` workflow result in GitHub Actions when connector evidence cannot expose it.
-4. Re-read `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `SUPPORT.md`, and this checklist from final `main`.
-5. Change repository visibility to public in GitHub settings.
-6. Confirm the public repository renders README, badges, license, issue forms, and the default branch correctly.
-7. If the maintainer activates GitHub Sponsors or another official funding destination, verify the destination first and then add `.github/FUNDING.yml` in a reviewed change so GitHub can expose the official funding path.
-8. Optionally create a GitHub Release only after deciding tag/version policy.
-9. Optionally publish to PyPI only as a separate explicit action after verifying package ownership and release credentials.
+For the initial publication and future release administration, the owner is responsible for:
 
-ReproAgent automation must not perform visibility changes, funding-account activation, GitHub Release creation, or PyPI publication without an explicit owner decision.
+1. Reviewing repository visibility and collaborator settings.
+2. Reviewing GitHub security settings and secret-scanning results available to the repository owner.
+3. Confirming push-triggered `main` workflow results in GitHub Actions when connector evidence cannot expose them.
+4. Re-reading public-facing policy and support files from the final default branch.
+5. Confirming the public repository renders README, badges, license, issue forms, and default branch correctly.
+6. Verifying the GitHub Sponsors profile/payment destination associated with `.github/FUNDING.yml` before relying on sponsorship revenue.
+7. Optionally creating a GitHub Release only after deciding tag/version policy.
+8. Optionally publishing to PyPI only as a separate explicit action after verifying package ownership and release credentials.
+
+ReproAgent automation must not perform billing changes, funding-account activation, GitHub Release creation, or PyPI publication without an explicit owner decision and a tool that safely supports the requested action.
